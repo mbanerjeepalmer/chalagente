@@ -1,0 +1,18 @@
+/**
+ * Cloudflare Worker config for OpenNext + Next.js.
+ * Docs: https://opennext.js.org/cloudflare
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "chalagente",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-03-25",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".open-next/assets"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
