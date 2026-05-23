@@ -163,6 +163,7 @@ func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
 		data.JID = id.String()
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	if err := pageTmpl.Execute(w, data); err != nil {
 		log.Printf("template: %v", err)
 	}
