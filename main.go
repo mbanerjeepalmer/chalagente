@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -31,6 +32,7 @@ type Event struct {
 
 type App struct {
 	client *whatsmeow.Client
+	demo   *DemoStore
 
 	mu          sync.RWMutex
 	currentQR   string
@@ -41,9 +43,10 @@ type App struct {
 	subs   map[chan Event]struct{}
 }
 
-func newApp(client *whatsmeow.Client) *App {
+func newApp(client *whatsmeow.Client, demo *DemoStore) *App {
 	return &App{
 		client: client,
+		demo:   demo,
 		subs:   make(map[chan Event]struct{}),
 	}
 }
@@ -117,8 +120,14 @@ func main() {
 		log.Fatalf("get device: %v", err)
 	}
 
+	demoDir := filepath.Join(dirOf(storePath), "demo")
+	demoStore, err := newDemoStore(demoDir)
+	if err != nil {
+		log.Fatalf("create demo store: %v", err)
+	}
+
 	client := whatsmeow.NewClient(device, waLog.Stdout("Client", "INFO", true))
-	app := newApp(client)
+	app := newApp(client, demoStore)
 	client.AddEventHandler(app.handleEvent)
 
 	if client.Store.ID == nil {
@@ -185,12 +194,13 @@ func (a *App) handleEvent(evt interface{}) {
 	}
 	a.publish(Event{Time: time.Now(), Dir: "in", Chat: msg.Info.Sender.String(), Body: body})
 
-	reply := &waProto.Message{Conversation: proto.String(autoReply)}
+	replyMsg := replyToInbound(DemoMessage{Dir: "in", Type: "text", Body: body})
+	reply := &waProto.Message{Conversation: proto.String(replyMsg.Body)}
 	if _, err := a.client.SendMessage(context.Background(), msg.Info.Chat, reply); err != nil {
 		log.Printf("send reply: %v", err)
 		return
 	}
-	a.publish(Event{Time: time.Now(), Dir: "out", Chat: msg.Info.Chat.String(), Body: autoReply})
+	a.publish(Event{Time: time.Now(), Dir: "out", Chat: msg.Info.Chat.String(), Body: replyMsg.Body})
 }
 
 func getenv(k, def string) string {

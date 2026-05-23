@@ -119,8 +119,21 @@ func (a *App) serveHTTP(addr string) {
 
 	protected := basicAuth(mux, user, pass)
 
+	demoPublic := http.NewServeMux()
+	demoPublic.HandleFunc("/demo", a.handleDemoChat)
+	demoPublic.HandleFunc("/demo/events", a.handleDemoEvents)
+	demoPublic.HandleFunc("/demo/media/", a.handleDemoMedia)
+
+	demoBot := http.NewServeMux()
+	demoBot.HandleFunc("/demo/bot", a.handleDemoBot)
+	demoBot.HandleFunc("/demo/bot/send", a.handleDemoBotSend)
+
 	root := http.NewServeMux()
 	root.HandleFunc("/healthz", a.handleHealth)
+	root.Handle("/demo/bot/", basicAuth(demoBot, user, pass))
+	root.Handle("/demo/bot", basicAuth(demoBot, user, pass))
+	root.Handle("/demo/", demoPublic)
+	root.Handle("/demo", demoPublic)
 	root.Handle("/", protected)
 
 	log.Printf("HTTP listening on %s (auth enabled, user=%s)", addr, user)

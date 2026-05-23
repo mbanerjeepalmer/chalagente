@@ -39,13 +39,27 @@ Open `http://localhost:8080/` to:
 - Send a message to any number.
 - Watch a live feed of incoming and outgoing messages.
 
+## Demo mode
+
+Demo mode works without WhatsApp pairing — useful for development and demos.
+
+- `GET /demo` — public WhatsApp-style chat UI (customer view). No auth required.
+- `GET /demo/events` — public SSE stream of demo messages.
+- `GET /demo/media/{id}` — public media files uploaded in demo mode.
+- `GET /demo/bot` — control panel to send messages as the customer (Basic Auth).
+- `POST /demo/bot/send` — multipart form: `type` (`text`|`image`|`audio`|`video`), `body` (text or caption), `file` (required for media).
+
+Open `/demo` in one tab and `/demo/bot` in another. Messages sent from the bot panel appear in the chat and trigger the same hardcoded auto-reply as real WhatsApp.
+
 ## Endpoints
 
-- `GET /` — web UI.
+- `GET /` — web UI (Basic Auth).
 - `GET /qr.png` — current pairing QR as PNG, `404` once paired.
 - `POST /send` — form: `to`, `text`. Redirects to `/`.
 - `GET /events` — Server-Sent Events stream of message activity.
 - `GET /healthz` — `200 ok` once connected and logged in, else `503`.
+- `GET /demo` — demo chat UI (public).
+- `GET /demo/bot` — demo control panel (Basic Auth).
 
 ## Config
 
@@ -56,6 +70,7 @@ Open `http://localhost:8080/` to:
 | `STORE_PATH`       | no       | `./data/store.db`  |
 | `HTTP_ADDR`        | no       | `:8080`            |
 
-The web UI is protected with HTTP Basic Auth. The service refuses to start if
-either credential is unset. `/healthz` is intentionally left open so Coolify
-health checks keep working.
+The admin web UI (`/`, `/send`, `/events`, `/demo/bot`) is protected with HTTP
+Basic Auth. The service refuses to start if either credential is unset.
+`/healthz` and `/demo` (including `/demo/events` and `/demo/media/*`) are
+intentionally left open.
