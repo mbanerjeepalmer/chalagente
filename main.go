@@ -14,6 +14,7 @@ import (
 	"go.mau.fi/whatsmeow"
 	waProto "go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store/sqlstore"
+	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"google.golang.org/protobuf/proto"
@@ -171,7 +172,9 @@ func (a *App) handleEvent(evt interface{}) {
 	if msg.Info.IsFromMe {
 		return
 	}
-	if msg.Info.Chat.Server != "s.whatsapp.net" {
+	switch msg.Info.Chat.Server {
+	case types.DefaultUserServer, types.HiddenUserServer:
+	default:
 		log.Printf("skipping non-1:1 chat server=%s", msg.Info.Chat.Server)
 		return
 	}
