@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -103,16 +105,44 @@ type pageData struct {
 }
 
 func (a *App) serveHTTP(addr string) {
+	user := os.Getenv("BASIC_AUTH_USER")
+	pass := os.Getenv("BASIC_AUTH_PASS")
+	if user == "" || pass == "" {
+		log.Fatal("BASIC_AUTH_USER and BASIC_AUTH_PASS must be set")
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", a.handleIndex)
 	mux.HandleFunc("/qr.png", a.handleQR)
 	mux.HandleFunc("/send", a.handleSend)
 	mux.HandleFunc("/events", a.handleEvents)
-	mux.HandleFunc("/healthz", a.handleHealth)
-	log.Printf("HTTP listening on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+
+	protected := basicAuth(mux, user, pass)
+
+	root := http.NewServeMux()
+	root.HandleFunc("/healthz", a.handleHealth)
+	root.Handle("/", protected)
+
+	log.Printf("HTTP listening on %s (auth enabled, user=%s)", addr, user)
+	if err := http.ListenAndServe(addr, root); err != nil {
 		log.Printf("http server: %v", err)
 	}
+}
+
+func basicAuth(next http.Handler, user, pass string) http.Handler {
+	expUser := []byte(user)
+	expPass := []byte(pass)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, p, ok := r.BasicAuth()
+		userOK := subtle.ConstantTimeCompare([]byte(u), expUser) == 1
+		passOK := subtle.ConstantTimeCompare([]byte(p), expPass) == 1
+		if !ok || !userOK || !passOK {
+			w.Header().Set("WWW-Authenticate", `Basic realm="chalagente"`)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {

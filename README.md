@@ -49,7 +49,13 @@ Open `http://localhost:8080/` to:
 
 ## Config
 
-| Env          | Default            |
-| ------------ | ------------------ |
-| `STORE_PATH` | `./data/store.db`  |
-| `HTTP_ADDR`  | `:8080`            |
+| Env                | Required | Default            |
+| ------------------ | -------- | ------------------ |
+| `BASIC_AUTH_USER`  | yes      | —                  |
+| `BASIC_AUTH_PASS`  | yes      | —                  |
+| `STORE_PATH`       | no       | `./data/store.db`  |
+| `HTTP_ADDR`        | no       | `:8080`            |
+
+The web UI is protected with HTTP Basic Auth. The service refuses to start if
+either credential is unset. `/healthz` is intentionally left open so Coolify
+health checks keep working.
