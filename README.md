@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Chalagente
 
-## Getting Started
+WhatsApp auto-reply POC built on [whatsmeow](https://github.com/tulir/whatsmeow).
 
-First, run the development server:
+Receives messages on a paired WhatsApp account and replies with a hardcoded
+string. Designed to deploy to Coolify as a Docker container.
+
+## Run locally
+
+Requires Go ≥ 1.23 (or just Docker).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+go mod tidy
+go run .
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+On first start, scan the QR code printed in the terminal with WhatsApp →
+Settings → Linked Devices. The session is saved to `./data/store.db`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Docker
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+docker build -t chalagente .
+docker run --rm -it -v "$PWD/data:/data" -p 8080:8080 chalagente
+```
 
-## Learn More
+## Coolify deploy
 
-To learn more about Next.js, take a look at the following resources:
+- New resource → Dockerfile-based application, pointing at this repo.
+- Mount a persistent volume at `/data`.
+- Expose port `8080`.
+- Open the container logs on first deploy and scan the QR code.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Web UI
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Open `http://localhost:8080/` to:
+- Scan the QR code in your browser (no terminal needed).
+- See connection status and the linked JID.
+- Send a message to any number.
+- Watch a live feed of incoming and outgoing messages.
 
-## Deploy on Vercel
+## Endpoints
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `GET /` — web UI.
+- `GET /qr.png` — current pairing QR as PNG, `404` once paired.
+- `POST /send` — form: `to`, `text`. Redirects to `/`.
+- `GET /events` — Server-Sent Events stream of message activity.
+- `GET /healthz` — `200 ok` once connected and logged in, else `503`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Config
+
+| Env          | Default            |
+| ------------ | ------------------ |
+| `STORE_PATH` | `./data/store.db`  |
+| `HTTP_ADDR`  | `:8080`            |

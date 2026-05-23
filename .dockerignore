@@ -1,0 +1,12 @@
+.git
+.gitignore
+.claude
+.next
+.open-next
+.wrangler
+node_modules
+data
+docs
+*.md
+Dockerfile
+.dockerignore
