@@ -7,8 +7,13 @@
 # Local whatsmeow session store
 /data/
 
-# Env
-.env*
+# Env (keep .env.example committable)
+.env
+.env.local
+!.env.example
+
+# Secrets / deploy config (not in repo)
+docs/coolify-env.md
 
 # OS / editor
 .DS_Store
