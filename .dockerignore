@@ -9,5 +9,6 @@ data
 docs
 *.md
 !docs/v1.5_responses.md
+!docs/v1.4.1_landing.md
 Dockerfile
 .dockerignore
