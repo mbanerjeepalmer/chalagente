@@ -36,9 +36,16 @@ func (m *MockEngine) Respond(ctx context.Context, req Request) (Reply, error) {
 	text := strings.ToLower(strings.TrimSpace(in.Text))
 	hasQuestion := strings.Contains(in.Text, "?") || strings.Contains(in.Text, "¿")
 
+	// Per-request business context (preferred) overrides the engine-level one
+	// set via NewMockEngineWithContext.
+	bc := m.bc
+	if req.Business.Name != "" || req.Business.Hours != "" || req.Business.Address != "" {
+		bc = req.Business
+	}
+
 	// Rule 1: hours.
 	if hasQuestion && containsAny(text, "hora", "horario", "abren", "cierran") {
-		if h := strings.TrimSpace(m.bc.Hours); h != "" {
+		if h := strings.TrimSpace(bc.Hours); h != "" {
 			return Reply{Text: "Nuestro horario es: " + h}, nil
 		}
 		return Reply{Text: "Te confirmo el horario en un momento."}, nil
@@ -46,7 +53,7 @@ func (m *MockEngine) Respond(ctx context.Context, req Request) (Reply, error) {
 
 	// Rule 2: location.
 	if containsAny(text, "dirección", "direccion", "donde", "dónde", "ubicación", "ubicacion") {
-		if a := strings.TrimSpace(m.bc.Address); a != "" {
+		if a := strings.TrimSpace(bc.Address); a != "" {
 			return Reply{Text: "Estamos en " + a + "."}, nil
 		}
 		return Reply{Text: "Te confirmo la dirección en un momento."}, nil

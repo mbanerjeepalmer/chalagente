@@ -87,14 +87,16 @@ func (a *App) processIncoming(businessID string, msg *events.Message) {
 		log.Printf("pipeline: list history: %v", err)
 	}
 
+	bc := businessContextFor(biz)
 	req := agent.Request{
-		SystemPrompt: agent.BuildSystemPrompt(businessContextFor(biz)),
+		SystemPrompt: agent.BuildSystemPrompt(bc),
 		History:      historyToAgent(history),
 		Incoming: agent.Message{
 			Role:      agent.RoleUser,
 			Text:      body,
 			Timestamp: time.Now(),
 		},
+		Business: bc,
 	}
 	if kind != "text" {
 		req.Incoming.Attachments = []agent.Attachment{{Kind: kind, Ref: msg.Info.ID}}

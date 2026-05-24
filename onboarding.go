@@ -409,6 +409,11 @@ var onbExtraTmpl = template.Must(template.New("onbExtra").Parse(onbCommonCSS + `
  <textarea name="extra" rows="12" placeholder="Ej: Aceptamos efectivo y tarjeta. Las reservas se hacen por adelantado. Tenemos opciones vegetarianas...">{{ .ExtraInfo }}</textarea>
  <button class="primary">Guardar y continuar</button>
 </form>
+<div style="margin:1.5rem 0;padding:1rem;background:#eef7ee;border:1px solid #cde2cd;border-radius:6px">
+ <strong>¿Quieres probar el agente ahora mismo?</strong>
+ <p>Antes de conectar WhatsApp, puedes mandarle mensajes desde aquí y ver cómo responde con los datos que ya escribiste.</p>
+ <a href="/app/demo" class="primary" style="display:inline-block;padding:.5rem 1rem;background:#25d366;color:white;border-radius:4px;text-decoration:none;font-weight:600">Abrir simulador →</a>
+</div>
 <p><a href="/onboarding/whatsapp">Saltar este paso</a></p>
 `))
 

@@ -65,6 +65,10 @@ type Request struct {
 	SystemPrompt string
 	History      []Message
 	Incoming     Message
+	// Business is optional. Real LLM engines should use SystemPrompt as their
+	// authoritative knowledge source; MockEngine uses these fields directly
+	// to feel context-aware without parsing prose.
+	Business BusinessContext
 }
 
 // Reply is what an Engine returns. Future versions may include tool calls.

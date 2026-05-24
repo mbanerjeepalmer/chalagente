@@ -35,6 +35,10 @@ func (a *App) Mux() http.Handler {
 	protected.HandleFunc("/app/business", a.handleDashboardBusiness)
 	protected.HandleFunc("/app/events", a.handleDashboardEvents)
 	protected.HandleFunc("/app/qr.png", a.handleDashboardShareQR)
+	protected.HandleFunc("/app/demo", a.handleDemoPage)
+	protected.HandleFunc("/app/demo/send", a.handleDemoSend)
+	protected.HandleFunc("/app/demo/history", a.handleDemoHistory)
+	protected.HandleFunc("/app/demo/reset", a.handleDemoReset)
 
 	mux.Handle("/onboarding", a.Auth.Middleware(protected))
 	mux.Handle("/onboarding/", a.Auth.Middleware(protected))

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -259,4 +261,26 @@ func first(s string, n int) string {
 		return s
 	}
 	return s[:n]
+}
+
+func reqCtx() context.Context { return context.Background() }
+
+func readAll(r io.Reader) string {
+	b, _ := io.ReadAll(r)
+	return string(b)
+}
+
+func multipartWithAudio(t *testing.T, filename string, data []byte) (*bytes.Buffer, string) {
+	t.Helper()
+	body := &bytes.Buffer{}
+	mw := multipart.NewWriter(body)
+	fw, err := mw.CreateFormFile("audio", filename)
+	if err != nil {
+		t.Fatalf("CreateFormFile: %v", err)
+	}
+	if _, err := fw.Write(data); err != nil {
+		t.Fatalf("write audio: %v", err)
+	}
+	mw.Close()
+	return body, mw.FormDataContentType()
 }
