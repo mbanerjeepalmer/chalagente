@@ -1,0 +1,810 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chalagente | Centro de Mando en WhatsApp</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #080c10;
+      --bg2:       #0d1117;
+      --line:      rgba(255,255,255,0.08);
+      --text:      #f0f4ff;
+      --muted:     #8b9ab8;
+      --green:     #25d366;
+      --green-dim: #1aad52;
+      --teal:      #36d5b2;
+      --max:       1160px;
+      --r:         20px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      width: min(94%, var(--max));
+      margin: 0 auto;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 1px solid var(--line);
+      background: rgba(8,12,16,0.85);
+      backdrop-filter: blur(14px);
+    }
+
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 0;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      font-size: 1.1rem;
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .logo-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 10px var(--green);
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 28px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      transition: color .2s;
+    }
+
+    .nav-links a:hover { color: var(--text); }
+
+    .nav-cta {
+      background: var(--green);
+      color: #03180b !important;
+      padding: 9px 20px;
+      border-radius: 999px;
+      font-weight: 700 !important;
+    }
+
+    /* ── HERO ── */
+    .hero {
+      padding: 90px 0 0;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 60% 50% at 80% 40%, rgba(37,211,102,0.07), transparent),
+        radial-gradient(ellipse 50% 40% at 10% 80%, rgba(54,213,178,0.06), transparent);
+      pointer-events: none;
+    }
+
+    .hero-inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      align-items: end;
+    }
+
+    .hero-text {
+      padding-bottom: 80px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      border: 1px solid rgba(37,211,102,0.35);
+      background: rgba(37,211,102,0.08);
+      color: var(--green);
+      border-radius: 999px;
+      padding: 6px 14px;
+      margin-bottom: 24px;
+    }
+
+    .badge-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50%      { opacity: .35; }
+    }
+
+    h1 {
+      font-size: clamp(2.2rem, 4.5vw, 3.8rem);
+      font-weight: 900;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      margin-bottom: 20px;
+    }
+
+    h1 em {
+      font-style: normal;
+      background: linear-gradient(90deg, var(--green), var(--teal));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-lead {
+      color: var(--muted);
+      font-size: clamp(1rem, 1.8vw, 1.15rem);
+      max-width: 50ch;
+      margin-bottom: 36px;
+    }
+
+    .cta-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-block;
+      text-decoration: none;
+      border-radius: 999px;
+      padding: 13px 24px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      transition: transform .15s, box-shadow .15s;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0,0,0,.35);
+    }
+
+    .btn-green {
+      background: var(--green);
+      color: #03180b;
+    }
+
+    .btn-outline {
+      border: 1px solid rgba(255,255,255,0.15);
+      color: var(--text);
+      background: rgba(255,255,255,0.04);
+    }
+
+    .hero-img-wrap {
+      position: relative;
+      align-self: end;
+    }
+
+    .hero-img {
+      width: 100%;
+      display: block;
+      border-radius: var(--r) var(--r) 0 0;
+      object-fit: cover;
+      max-height: 560px;
+      object-position: top;
+      border: 1px solid var(--line);
+      border-bottom: 0;
+    }
+
+    /* ── LOGOS / TRUST ── */
+    .trust {
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      padding: 22px 0;
+    }
+
+    .trust-inner {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .trust-label {
+      color: var(--muted);
+      font-size: 0.8rem;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .trust-chips {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #c8d8f0;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 14px;
+    }
+
+    /* ── SECTIONS ── */
+    section { padding: 80px 0; }
+
+    h2 {
+      font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      margin-bottom: 14px;
+    }
+
+    h2 em {
+      font-style: normal;
+      color: var(--green);
+    }
+
+    .sec-lead {
+      color: var(--muted);
+      max-width: 60ch;
+      font-size: 1.05rem;
+      margin-bottom: 48px;
+    }
+
+    /* ── PAIN CARDS ── */
+    .pain-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--line);
+      border-radius: var(--r);
+      padding: 28px 24px;
+      transition: border-color .2s;
+    }
+
+    .card:hover { border-color: rgba(37,211,102,0.3); }
+
+    .card-icon {
+      font-size: 1.8rem;
+      margin-bottom: 14px;
+    }
+
+    .card h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .card p {
+      color: var(--muted);
+      font-size: 0.93rem;
+      line-height: 1.6;
+    }
+
+    /* ── FEATURE SPLIT ── */
+    .feature-split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 60px;
+      align-items: center;
+    }
+
+    .feature-split.rev { direction: rtl; }
+    .feature-split.rev > * { direction: ltr; }
+
+    .feature-img {
+      width: 100%;
+      border-radius: var(--r);
+      display: block;
+      border: 1px solid var(--line);
+      object-fit: cover;
+    }
+
+    .feature-body h2 { margin-bottom: 14px; }
+
+    .feature-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-top: 28px;
+    }
+
+    .feature-list li {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+
+    .feat-num {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(37,211,102,0.15);
+      border: 1px solid rgba(37,211,102,0.3);
+      color: var(--green);
+      font-size: 0.78rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 2px;
+    }
+
+    .feat-text strong {
+      display: block;
+      font-size: 0.97rem;
+      margin-bottom: 3px;
+    }
+
+    .feat-text span {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    /* ── ROUTINE TABLE ── */
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--r);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+      background: var(--bg2);
+    }
+
+    thead tr {
+      background: rgba(37,211,102,0.06);
+    }
+
+    th {
+      padding: 16px 20px;
+      text-align: left;
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--green);
+      border-bottom: 1px solid var(--line);
+    }
+
+    td {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      font-size: 0.93rem;
+    }
+
+    td:first-child {
+      font-weight: 700;
+      white-space: nowrap;
+      color: var(--text);
+    }
+
+    td strong { color: var(--text); }
+
+    td em {
+      font-style: normal;
+      color: var(--muted);
+      display: block;
+      font-size: 0.88rem;
+      margin-top: 4px;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    .tag {
+      display: inline-block;
+      background: rgba(37,211,102,0.1);
+      border: 1px solid rgba(37,211,102,0.25);
+      color: var(--green);
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    /* ── TESTIMONIAL ── */
+    .testi-wrap {
+      background: linear-gradient(135deg, rgba(37,211,102,0.06), rgba(54,213,178,0.04));
+      border: 1px solid rgba(37,211,102,0.2);
+      border-radius: 24px;
+      padding: 48px;
+    }
+
+    .stars {
+      color: var(--green);
+      font-size: 1.1rem;
+      margin-bottom: 18px;
+      letter-spacing: 3px;
+    }
+
+    .quote {
+      font-size: clamp(1.1rem, 2vw, 1.35rem);
+      font-weight: 600;
+      line-height: 1.5;
+      color: var(--text);
+      margin-bottom: 24px;
+      max-width: 70ch;
+    }
+
+    .quote-attr {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    /* ── FINAL CTA ── */
+    .final-cta {
+      text-align: center;
+      padding: 90px 0 100px;
+      position: relative;
+    }
+
+    .final-cta::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 60% 70% at 50% 50%, rgba(37,211,102,0.06), transparent);
+      pointer-events: none;
+    }
+
+    .final-cta h2 {
+      margin-bottom: 16px;
+    }
+
+    .final-cta p {
+      color: var(--muted);
+      max-width: 52ch;
+      margin: 0 auto 36px;
+      font-size: 1.05rem;
+    }
+
+    .wa-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 32px;
+      background: rgba(37,211,102,0.1);
+      border: 1px solid rgba(37,211,102,0.25);
+      border-radius: 999px;
+      padding: 8px 18px;
+      color: var(--green);
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--line);
+      text-align: center;
+      padding: 24px 0 32px;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      .hero-inner        { grid-template-columns: 1fr; }
+      .hero-text         { padding-bottom: 0; }
+      .hero-img          { border-radius: var(--r); max-height: 320px; }
+      .feature-split     { grid-template-columns: 1fr; }
+      .feature-split.rev { direction: ltr; }
+      .nav-links         { display: none; }
+      .testi-wrap        { padding: 28px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <div class="container">
+      <div class="nav-inner">
+        <a href="#" class="logo">
+          <span class="logo-dot"></span>
+          Chalagente
+        </a>
+        <ul class="nav-links">
+          <li><a href="#como-funciona">Cómo funciona</a></li>
+          <li><a href="#rutina">Tu rutina diaria</a></li>
+          <li><a href="#contacto" class="nav-cta">Demo gratis</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="container">
+      <div class="hero-inner">
+        <div class="hero-text">
+          <div class="badge">
+            <span class="badge-dot"></span>
+            Asistente de IA de Grado Humano
+          </div>
+          <h1>¿Tu negocio crece, pero tu operación es un <em>caos</em>?</h1>
+          <p class="hero-lead">
+            Controla proyectos, inventario y agenda desde WhatsApp.
+            Sin hojas de cálculo. Sin llamadas interminables. Sin caos.
+          </p>
+          <div class="cta-row">
+            <a href="#contacto" class="btn btn-green">Quiero mi demo gratis</a>
+            <a href="#como-funciona" class="btn btn-outline">Ver cómo funciona</a>
+          </div>
+        </div>
+        <div class="hero-img-wrap">
+          <img src="warehouse-hero.png" alt="Operador gestionando operaciones de almacén desde WhatsApp con IA" class="hero-img" />
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- TRUST BAR -->
+  <div class="trust">
+    <div class="container">
+      <div class="trust-inner">
+        <span class="trust-label">Conectado con</span>
+        <div class="trust-chips">
+          <span class="chip">WhatsApp Business API</span>
+          <span class="chip">ElevenLabs</span>
+          <span class="chip">Google Calendar</span>
+          <span class="chip">CRM</span>
+          <span class="chip">Inventario en tiempo real</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <main>
+
+    <!-- PROBLEMA -->
+    <section>
+      <div class="container">
+        <h2>Tu operación no debería<br><em>frenar tu crecimiento</em></h2>
+        <p class="sec-lead">
+          Manejar clientes, coordinar equipos en campo, revisar inventarios y comprar materiales
+          se convierte en un cuello de botella. Mientras apagas fuegos operativos, tu negocio deja de escalar.
+        </p>
+        <div class="pain-grid">
+          <article class="card">
+            <div class="card-icon">💬</div>
+            <h3>Clientes descoordinados</h3>
+            <p>Seguimientos y confirmaciones dispersos en múltiples chats sin trazabilidad ni control.</p>
+          </article>
+          <article class="card">
+            <div class="card-icon">📅</div>
+            <h3>Agenda sin blindar</h3>
+            <p>Choques de horario y llamadas interminables para reagendar. Tiempo y clientes perdidos.</p>
+          </article>
+          <article class="card">
+            <div class="card-icon">📦</div>
+            <h3>Inventario reactivo</h3>
+            <p>Compras urgentes, materiales duplicados y retrasos por falta de visibilidad en tiempo real.</p>
+          </article>
+          <article class="card">
+            <div class="card-icon">🔥</div>
+            <h3>Operación en modo apagafuegos</h3>
+            <p>El dueño concentra todas las decisiones. El negocio no escala porque el cuello de botella eres tú.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURE: TRASPASO -->
+    <section id="como-funciona">
+      <div class="container">
+        <div class="feature-split">
+          <img src="hero.png" alt="Briefing de voz automático al cerrar una venta" class="feature-img" />
+          <div class="feature-body">
+            <h2>🧠 De la venta a la acción <em>en segundos</em></h2>
+            <p class="sec-lead" style="margin-bottom:0">
+              En el momento en que tu agente cierra un cliente, el sistema se pone a trabajar.
+              Sin fricción manual, sin re-escribir nada.
+            </p>
+            <ul class="feature-list">
+              <li>
+                <span class="feat-num">1</span>
+                <div class="feat-text">
+                  <strong>Briefing de voz automatizado</strong>
+                  <span>Tu equipo operativo recibe una nota de voz personalizada (vía ElevenLabs) con los detalles exactos, requerimientos y materiales del pedido.</span>
+                </div>
+              </li>
+              <li>
+                <span class="feat-num">2</span>
+                <div class="feat-text">
+                  <strong>Apoyo visual con IA</strong>
+                  <span>Para proyectos técnicos, genera simulaciones en video estilo TikTok para que el equipo visualice el trabajo antes de llegar al sitio.</span>
+                </div>
+              </li>
+              <li>
+                <span class="feat-num">3</span>
+                <div class="feat-text">
+                  <strong>Cero transcripción manual</strong>
+                  <span>El traspaso de ventas a operaciones ocurre solo. Tu equipo nunca pregunta "¿qué pedió el cliente?"</span>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURE: AGENDA -->
+    <section>
+      <div class="container">
+        <div class="feature-split rev">
+          <img src="feature.png" alt="Agenda inteligente gestionada por IA desde WhatsApp" class="feature-img" />
+          <div class="feature-body">
+            <h2>📅 Agenda blindada,<br><em>sin errores</em></h2>
+            <p class="sec-lead" style="margin-bottom:0">
+              Olvídate del teléfono descompuesto para agendar citas.
+              La IA consulta disponibilidad en tiempo real y actúa sola.
+            </p>
+            <ul class="feature-list">
+              <li>
+                <span class="feat-num">✓</span>
+                <div class="feat-text">
+                  <strong>Confirmación automática</strong>
+                  <span>¿Hay disponibilidad? Confirma al cliente e introduce el evento en el calendario sin que toques nada.</span>
+                </div>
+              </li>
+              <li>
+                <span class="feat-num">✓</span>
+                <div class="feat-text">
+                  <strong>Resolución inteligente de conflictos</strong>
+                  <span>¿Choque de horarios? La IA presenta las mejores opciones al administrador para decidir con un solo toque.</span>
+                </div>
+              </li>
+              <li>
+                <span class="feat-num">✓</span>
+                <div class="feat-text">
+                  <strong>Todo desde WhatsApp</strong>
+                  <span>No abres otra app. No revisas otro calendario. El centro de mando es tu WhatsApp.</span>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ROUTINE TABLE -->
+    <section id="rutina" style="background: var(--bg2); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);">
+      <div class="container">
+        <h2>Tu nueva rutina diaria<br><em>en piloto automático</em></h2>
+        <p class="sec-lead">Cada mañana tu negocio ya está listo. Sin que tú hayas abierto una sola app.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Hora / Evento</th>
+                <th>Lo que hace tu Asistente de IA</th>
+                <th>Tu beneficio directo</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <span class="tag">07:00 AM</span><br>
+                  Morning Briefing
+                </td>
+                <td>
+                  <strong>Resumen de voz en WhatsApp:</strong>
+                  <em>Cruza tu CRM y calendario para enviarte las prioridades del día en audio.</em>
+                </td>
+                <td>Despiertas con claridad absoluta sin revisar 5 apps distintas.</td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="tag">Logística</span><br>
+                  Cálculo de recursos
+                </td>
+                <td>
+                  <strong>Detección de faltantes:</strong>
+                  <em>Analiza la agenda del día y cruza contra inventario actual para detectar qué hace falta.</em>
+                </td>
+                <td>Cero vueltas de última hora al proveedor. Cero retrasos por material faltante.</td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="tag">Compras</span><br>
+                  1 clic
+                </td>
+                <td>
+                  <strong>Órdenes de compra inteligentes:</strong>
+                  <em>"Hoy necesitas 12 sacos de cemento tipo A y una camioneta extra." Apruebas desde WhatsApp y el sistema compra.</em>
+                </td>
+                <td>Menos desperdicio, menos urgencias y control total del gasto operativo.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TESTIMONIAL -->
+    <section>
+      <div class="container">
+        <div class="testi-wrap">
+          <div class="stars">★★★★★</div>
+          <p class="quote">
+            "Dejamos de perder dinero en materiales duplicados y vueltas de última hora.
+            Es como tener un director de operaciones trabajando 24/7
+            por una fracción de su costo."
+          </p>
+          <p class="quote-attr">— Director de Operaciones · Empresa de Logística e Instalaciones</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FINAL CTA -->
+    <section id="contacto" class="final-cta">
+      <div class="container">
+        <div class="wa-badge">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.125.558 4.122 1.532 5.855L0 24l6.302-1.507A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.808 9.808 0 01-5.034-1.384l-.36-.214-3.742.895.942-3.638-.235-.375A9.818 9.818 0 012.182 12C2.182 6.57 6.57 2.182 12 2.182S21.818 6.57 21.818 12 17.43 21.818 12 21.818z"/></svg>
+          WhatsApp como centro de mando
+        </div>
+        <h2>Convierte tu WhatsApp en el<br><em>centro de mando</em> de tu negocio</h2>
+        <p>
+          Centraliza ventas, operaciones, agenda e inventario en un solo flujo inteligente.
+          Menos caos, más crecimiento real.
+        </p>
+        <a href="#" class="btn btn-green" style="font-size:1.05rem; padding:15px 32px;">
+          Agendar diagnóstico gratuito
+        </a>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <div class="container">
+      Chalagente · Automatización inteligente para empresas en crecimiento
+    </div>
+  </footer>
+
+</body>
+</html>
