@@ -18,6 +18,35 @@ import (
 
 const tryCookieName = "chala_try"
 
+type demoMessage struct {
+	Time time.Time `json:"time"`
+	Dir  string    `json:"dir"` // "in" (customer) | "out" (bot)
+	Body string    `json:"body"`
+	Kind string    `json:"kind"` // "text" | "audio"
+}
+
+func demoHistoryToAgent(msgs []demoMessage) []agent.Message {
+	out := make([]agent.Message, 0, len(msgs))
+	// Drop the very last "in" message — it's the one currently being processed
+	// and gets passed as Incoming.
+	last := len(msgs) - 1
+	if last >= 0 && msgs[last].Dir == "in" {
+		msgs = msgs[:last]
+	}
+	for _, m := range msgs {
+		role := agent.RoleUser
+		if m.Dir == "out" {
+			role = agent.RoleAssistant
+		}
+		out = append(out, agent.Message{
+			Role:      role,
+			Text:      m.Body,
+			Timestamp: m.Time,
+		})
+	}
+	return out
+}
+
 // tryBusiness mirrors the fields the agent actually reads off of a tenant.
 // Kept here (not in internal/store) because demo sessions are in-memory only.
 type tryBusiness struct {

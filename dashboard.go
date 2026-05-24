@@ -234,7 +234,6 @@ form{display:inline}
 <nav class="tabs">
  <a href="/app" class="active">Conversaciones</a>
  <a href="/app/business">Información</a>
- <a href="/app/demo">Probar agente</a>
 </nav>
 {{ if .Flash }}<div class="flash">{{ .Flash }}</div>{{ end }}
 <div class="grid">
@@ -317,7 +316,6 @@ button{padding:.6rem 1rem;font-size:1rem;border-radius:4px;border:1px solid #bbb
 <nav class="tabs">
  <a href="/app">Conversaciones</a>
  <a href="/app/business" class="active">Información</a>
- <a href="/app/demo">Probar agente</a>
 </nav>
 <h1>Información del negocio</h1>
 {{ if .Flash }}<div class="flash">{{ .Flash }}</div>{{ end }}

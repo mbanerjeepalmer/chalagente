@@ -29,9 +29,6 @@ type App struct {
 	pairMu       sync.Mutex
 	pairSessions map[string]*pairSession
 
-	demoOnce  sync.Once
-	demoState *demoHistory
-
 	tryOnce  sync.Once
 	tryState *tryStore
 }
