@@ -365,6 +365,14 @@ var pageTmpl = template.Must(template.New("page").Parse(`<!doctype html>
  · {{ if .Connected }}<span class="status ok">connected</span>{{ else }}<span class="status bad">disconnected</span>{{ end }}
 </section>
 
+<section>
+ <h2>Session</h2>
+ <p>Hardcoded responses cycle through {{ .ResponseCount }} messages per chat. Reset to start over.</p>
+ <form method="POST" action="/admin/reset-session">
+  <button>Reset session</button>
+ </form>
+</section>
+
 {{ if not .LoggedIn }}
 <section>
  <h2>Pair</h2>
@@ -405,13 +413,14 @@ var pageTmpl = template.Must(template.New("page").Parse(`<!doctype html>
 </html>`))
 
 type pageData struct {
-	LoggedIn  bool
-	Connected bool
-	JID       string
-	HasQR     bool
-	Now       int64
-	Flash     string
-	FlashErr  bool
+	LoggedIn      bool
+	Connected     bool
+	JID           string
+	HasQR         bool
+	Now           int64
+	Flash         string
+	FlashErr      bool
+	ResponseCount int
 }
 
 func (a *App) serveHTTP(addr string) {
@@ -427,6 +436,7 @@ func (a *App) serveHTTP(addr string) {
 	admin.HandleFunc("/admin/qr.png", a.handleQR)
 	admin.HandleFunc("/admin/send", a.handleSend)
 	admin.HandleFunc("/admin/events", a.handleEvents)
+	admin.HandleFunc("/admin/reset-session", a.handleResetSession)
 
 	protected := basicAuth(admin, user, pass)
 
@@ -476,12 +486,13 @@ func (a *App) handleAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 	qrCode, _ := a.qr()
 	data := pageData{
-		LoggedIn:  a.client.IsLoggedIn(),
-		Connected: a.client.IsConnected(),
-		HasQR:     qrCode != "",
-		Now:       time.Now().UnixNano(),
-		Flash:     r.URL.Query().Get("flash"),
-		FlashErr:  r.URL.Query().Get("err") == "1",
+		LoggedIn:      a.client.IsLoggedIn(),
+		Connected:     a.client.IsConnected(),
+		HasQR:         qrCode != "",
+		Now:           time.Now().UnixNano(),
+		Flash:         r.URL.Query().Get("flash"),
+		FlashErr:      r.URL.Query().Get("err") == "1",
+		ResponseCount: len(hardcodedResponses),
 	}
 	if id := a.client.Store.ID; id != nil {
 		data.JID = id.String()
@@ -569,6 +580,15 @@ func redirectFlash(w http.ResponseWriter, r *http.Request, msg string, isErr boo
 		q.Set("err", "1")
 	}
 	http.Redirect(w, r, "/admin?"+q.Encode(), http.StatusSeeOther)
+}
+
+func (a *App) handleResetSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	a.resetSessions()
+	redirectFlash(w, r, "session reset", false)
 }
 
 func (a *App) handleEvents(w http.ResponseWriter, r *http.Request) {

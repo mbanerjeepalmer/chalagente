@@ -20,8 +20,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const autoReply = "¡Hola! Gracias por escribir. Esta es una respuesta automática del POC de Chalagente."
-
 type Event struct {
 	Time time.Time `json:"time"`
 	Dir  string    `json:"dir"` // "in" | "out"
@@ -39,13 +37,34 @@ type App struct {
 	busMu  sync.Mutex
 	recent []Event
 	subs   map[chan Event]struct{}
+
+	sessionMu  sync.Mutex
+	sessionIdx map[string]int
 }
 
 func newApp(client *whatsmeow.Client) *App {
 	return &App{
-		client: client,
-		subs:   make(map[chan Event]struct{}),
+		client:     client,
+		subs:       make(map[chan Event]struct{}),
+		sessionIdx: make(map[string]int),
 	}
+}
+
+func (a *App) nextResponse(chat string) (string, bool) {
+	a.sessionMu.Lock()
+	defer a.sessionMu.Unlock()
+	i := a.sessionIdx[chat]
+	if i >= len(hardcodedResponses) {
+		return "", false
+	}
+	a.sessionIdx[chat] = i + 1
+	return hardcodedResponses[i], true
+}
+
+func (a *App) resetSessions() {
+	a.sessionMu.Lock()
+	defer a.sessionMu.Unlock()
+	a.sessionIdx = make(map[string]int)
 }
 
 func (a *App) setQR(code, ev string) {
@@ -185,12 +204,17 @@ func (a *App) handleEvent(evt interface{}) {
 	}
 	a.publish(Event{Time: time.Now(), Dir: "in", Chat: msg.Info.Sender.String(), Body: body})
 
-	reply := &waProto.Message{Conversation: proto.String(autoReply)}
+	replyText, ok := a.nextResponse(msg.Info.Chat.String())
+	if !ok {
+		log.Printf("session exhausted for %s; not replying", msg.Info.Chat)
+		return
+	}
+	reply := &waProto.Message{Conversation: proto.String(replyText)}
 	if _, err := a.client.SendMessage(context.Background(), msg.Info.Chat, reply); err != nil {
 		log.Printf("send reply: %v", err)
 		return
 	}
-	a.publish(Event{Time: time.Now(), Dir: "out", Chat: msg.Info.Chat.String(), Body: autoReply})
+	a.publish(Event{Time: time.Now(), Dir: "out", Chat: msg.Info.Chat.String(), Body: replyText})
 }
 
 func getenv(k, def string) string {
