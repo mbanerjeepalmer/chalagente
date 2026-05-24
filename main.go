@@ -38,43 +38,54 @@ type App struct {
 	recent []Event
 	subs   map[chan Event]struct{}
 
-	sessionMu  sync.Mutex
-	sessionIdx map[string]int
+	scripted *scriptedReplier
+	agent    Replier
+
+	modeMu      sync.RWMutex
+	currentMode string
 }
 
 func newApp(client *whatsmeow.Client) *App {
 	return &App{
-		client:     client,
-		subs:       make(map[chan Event]struct{}),
-		sessionIdx: make(map[string]int),
+		client:      client,
+		subs:        make(map[chan Event]struct{}),
+		scripted:    newScriptedReplier(hardcodedResponses),
+		currentMode: "scripted",
 	}
 }
 
-func (a *App) nextResponse(chat string) (string, bool) {
-	a.sessionMu.Lock()
-	defer a.sessionMu.Unlock()
-	i := a.sessionIdx[chat]
-	if i >= len(hardcodedResponses) {
-		return "", false
-	}
-	a.sessionIdx[chat] = i + 1
-	return hardcodedResponses[i], true
+func (a *App) mode() string {
+	a.modeMu.RLock()
+	defer a.modeMu.RUnlock()
+	return a.currentMode
 }
+
+func (a *App) setMode(m string) error {
+	if m != "scripted" && m != "agent" {
+		return fmt.Errorf("invalid mode %q", m)
+	}
+	a.modeMu.Lock()
+	a.currentMode = m
+	a.modeMu.Unlock()
+	return nil
+}
+
+func (a *App) reply(ctx context.Context, chat, text string) (string, bool, error) {
+	if a.mode() == "agent" && a.agent != nil {
+		return a.agent.Reply(ctx, chat, text)
+	}
+	return a.scripted.Reply(ctx, chat, text)
+}
+
+func (a *App) isLoggedIn() bool  { return a.client != nil && a.client.IsLoggedIn() }
+func (a *App) isConnected() bool { return a.client != nil && a.client.IsConnected() }
 
 func (a *App) sessionSnapshot() map[string]int {
-	a.sessionMu.Lock()
-	defer a.sessionMu.Unlock()
-	out := make(map[string]int, len(a.sessionIdx))
-	for k, v := range a.sessionIdx {
-		out[k] = v
-	}
-	return out
+	return a.scripted.Snapshot()
 }
 
 func (a *App) resetSessions() {
-	a.sessionMu.Lock()
-	defer a.sessionMu.Unlock()
-	a.sessionIdx = make(map[string]int)
+	a.scripted.Reset()
 }
 
 func (a *App) setQR(code, ev string) {
@@ -127,6 +138,14 @@ func main() {
 	storePath := getenv("STORE_PATH", "./data/store.db")
 	httpAddr := getenv("HTTP_ADDR", ":8080")
 
+	if os.Getenv("HTTP_ONLY") == "1" {
+		app := newApp(nil)
+		configureAgent(app)
+		log.Printf("HTTP_ONLY=1: skipping WhatsApp client; serving admin UI only")
+		app.serveHTTP(httpAddr)
+		return
+	}
+
 	if err := os.MkdirAll(dirOf(storePath), 0o755); err != nil {
 		log.Fatalf("create store dir: %v", err)
 	}
@@ -148,6 +167,7 @@ func main() {
 
 	client := whatsmeow.NewClient(device, waLog.Stdout("Client", "INFO", true))
 	app := newApp(client)
+	configureAgent(app)
 	client.AddEventHandler(app.handleEvent)
 
 	if client.Store.ID == nil {
@@ -214,17 +234,57 @@ func (a *App) handleEvent(evt interface{}) {
 	}
 	a.publish(Event{Time: time.Now(), Dir: "in", Chat: msg.Info.Sender.String(), Body: body})
 
-	replyText, ok := a.nextResponse(msg.Info.Chat.String())
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	replyText, ok, err := a.reply(ctx, msg.Info.Chat.String(), body)
+	if err != nil {
+		log.Printf("reply (%s mode): %v", a.mode(), err)
+		return
+	}
 	if !ok {
-		log.Printf("session exhausted for %s; not replying", msg.Info.Chat)
+		log.Printf("no reply for %s in %s mode", msg.Info.Chat, a.mode())
 		return
 	}
 	reply := &waProto.Message{Conversation: proto.String(replyText)}
-	if _, err := a.client.SendMessage(context.Background(), msg.Info.Chat, reply); err != nil {
+	if _, err := a.client.SendMessage(ctx, msg.Info.Chat, reply); err != nil {
 		log.Printf("send reply: %v", err)
 		return
 	}
 	a.publish(Event{Time: time.Now(), Dir: "out", Chat: msg.Info.Chat.String(), Body: replyText})
+}
+
+const defaultSystemPrompt = `You are Chalagente, a friendly WhatsApp customer-service assistant for a small business. Reply concisely (1-3 sentences), in the same language the customer uses (default Spanish). Be warm, professional, and direct.`
+
+func configureAgent(app *App) {
+	systemPrompt := getenv("AGENT_SYSTEM_PROMPT", defaultSystemPrompt)
+	var chain []Replier
+
+	if tok := os.Getenv("AWS_BEARER_TOKEN_BEDROCK"); tok != "" {
+		region := getenv("AWS_REGION", "us-east-1")
+		model := getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0")
+		endpoint := getenv("BEDROCK_ENDPOINT", fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com", region))
+		chain = append(chain, newBedrockReplier(endpoint, tok, model, systemPrompt))
+		log.Printf("bedrock agent enabled (model=%s)", model)
+	}
+	if tok := os.Getenv("MISTRAL_API_KEY"); tok != "" {
+		model := getenv("MISTRAL_MODEL_ID", "mistral-small-latest")
+		endpoint := getenv("MISTRAL_ENDPOINT", "https://api.mistral.ai")
+		chain = append(chain, newMistralReplier(endpoint, tok, model, systemPrompt))
+		log.Printf("mistral fallback enabled (model=%s)", model)
+	}
+
+	switch len(chain) {
+	case 0:
+		log.Printf("no agent provider configured (set AWS_BEARER_TOKEN_BEDROCK or MISTRAL_API_KEY); agent mode unavailable")
+		return
+	case 1:
+		app.agent = chain[0]
+	default:
+		app.agent = &fallbackReplier{replier: chain}
+	}
+	if os.Getenv("DEFAULT_MODE") == "agent" {
+		_ = app.setMode("agent")
+	}
 }
 
 func getenv(k, def string) string {
