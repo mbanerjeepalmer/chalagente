@@ -106,6 +106,13 @@ CREATE TABLE tool_configs (
 CREATE INDEX idx_tool_configs_business_id ON tool_configs(business_id);
 `,
 	},
+	{
+		name: "0002_cognito_sub",
+		sql: `
+ALTER TABLE users ADD COLUMN cognito_sub TEXT;
+CREATE UNIQUE INDEX idx_users_cognito_sub ON users(cognito_sub);
+`,
+	},
 }
 
 // runMigrations applies any pending migrations, in order. It creates the

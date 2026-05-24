@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"net"
 	"net/http"
 	"time"
 )
@@ -14,9 +15,8 @@ func (a *App) Mux() http.Handler {
 	mux.HandleFunc("/", a.handleLanding)
 	mux.HandleFunc("/healthz", a.handleHealth)
 
-	mux.HandleFunc("GET /signup", a.Auth.SignupForm)
-	mux.HandleFunc("POST /signup", a.Auth.SignupSubmit)
-	mux.HandleFunc("/auth/verify", a.Auth.Verify)
+	mux.HandleFunc("GET /signup", a.Auth.Login)
+	mux.HandleFunc("GET /auth/cognito/callback", a.Auth.Callback)
 	mux.HandleFunc("POST /logout", a.Auth.Logout)
 
 	mux.HandleFunc("/demo", a.handleTryPage)
@@ -50,10 +50,13 @@ func (a *App) Mux() http.Handler {
 	return mux
 }
 
-func (a *App) serveHTTP(addr string) {
-	if err := http.ListenAndServe(addr, a.Mux()); err != nil {
-		log.Printf("http server: %v", err)
+func (a *App) serveHTTP(addr string) error {
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", addr, err)
 	}
+	log.Printf("HTTP listening on %s", addr)
+	return http.Serve(ln, a.Mux())
 }
 
 func (a *App) handleLanding(w http.ResponseWriter, r *http.Request) {

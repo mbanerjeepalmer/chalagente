@@ -105,6 +105,46 @@ func TestGetUserNotFound(t *testing.T) {
 	}
 }
 
+func TestEnsureUserFromCognito(t *testing.T) {
+	s := newTestStore(t)
+	ctx := context.Background()
+
+	u, err := s.EnsureUserFromCognito(ctx, "sub-1", "new@example.com")
+	if err != nil {
+		t.Fatalf("EnsureUserFromCognito create: %v", err)
+	}
+	if u.CognitoSub != "sub-1" || u.Email != "new@example.com" {
+		t.Fatalf("user = %+v", u)
+	}
+
+	u2, err := s.EnsureUserFromCognito(ctx, "sub-1", "new@example.com")
+	if err != nil {
+		t.Fatalf("EnsureUserFromCognito lookup: %v", err)
+	}
+	if u2.ID != u.ID {
+		t.Fatalf("expected same user id, got %q vs %q", u2.ID, u.ID)
+	}
+
+	legacy, err := s.CreateUser(ctx, "legacy@example.com")
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	linked, err := s.EnsureUserFromCognito(ctx, "sub-legacy", "legacy@example.com")
+	if err != nil {
+		t.Fatalf("EnsureUserFromCognito link: %v", err)
+	}
+	if linked.ID != legacy.ID {
+		t.Fatalf("expected link to legacy user, got %q vs %q", linked.ID, legacy.ID)
+	}
+	got, err := s.GetUserByCognitoSub(ctx, "sub-legacy")
+	if err != nil {
+		t.Fatalf("GetUserByCognitoSub: %v", err)
+	}
+	if got.ID != legacy.ID {
+		t.Fatalf("linked cognito sub not persisted")
+	}
+}
+
 func TestMagicLinkRoundTrip(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()

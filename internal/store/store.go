@@ -15,6 +15,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -95,9 +96,10 @@ func parseTime(s string) time.Time {
 
 // User is a signed-up account. One user owns at most one Business in v2.
 type User struct {
-	ID        string
-	Email     string
-	CreatedAt time.Time
+	ID         string
+	Email      string
+	CognitoSub string
+	CreatedAt  time.Time
 }
 
 // Session is a cookie-backed login session.
@@ -187,18 +189,72 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (User, error) 
 	return s.getUserWhere(ctx, "email = ?", email)
 }
 
+// GetUserByCognitoSub fetches a user by Cognito subject identifier.
+func (s *Store) GetUserByCognitoSub(ctx context.Context, sub string) (User, error) {
+	return s.getUserWhere(ctx, "cognito_sub = ?", sub)
+}
+
+// EnsureUserFromCognito returns the user for sub, linking by email or creating anew.
+func (s *Store) EnsureUserFromCognito(ctx context.Context, sub, email string) (User, error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if sub == "" || email == "" {
+		return User{}, fmt.Errorf("ensure cognito user: empty sub or email")
+	}
+
+	u, err := s.GetUserByCognitoSub(ctx, sub)
+	if err == nil {
+		return u, nil
+	}
+	if !errors.Is(err, ErrNotFound) {
+		return User{}, err
+	}
+
+	u, err = s.GetUserByEmail(ctx, email)
+	if err == nil {
+		if _, err := s.db.ExecContext(ctx,
+			`UPDATE users SET cognito_sub = ? WHERE id = ?`, sub, u.ID,
+		); err != nil {
+			return User{}, fmt.Errorf("link cognito sub: %w", err)
+		}
+		u.CognitoSub = sub
+		return u, nil
+	}
+	if !errors.Is(err, ErrNotFound) {
+		return User{}, err
+	}
+
+	u = User{
+		ID:         uuid.NewString(),
+		Email:      email,
+		CognitoSub: sub,
+		CreatedAt:  time.Now().UTC(),
+	}
+	_, err = s.db.ExecContext(ctx,
+		`INSERT INTO users(id, email, cognito_sub, created_at) VALUES(?, ?, ?, ?)`,
+		u.ID, u.Email, u.CognitoSub, u.CreatedAt.Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return User{}, fmt.Errorf("create cognito user: %w", err)
+	}
+	return u, nil
+}
+
 func (s *Store) getUserWhere(ctx context.Context, where string, arg string) (User, error) {
 	var u User
 	var createdAt string
+	var cognitoSub sql.NullString
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, email, created_at FROM users WHERE `+where,
+		`SELECT id, email, cognito_sub, created_at FROM users WHERE `+where,
 		arg,
-	).Scan(&u.ID, &u.Email, &createdAt)
+	).Scan(&u.ID, &u.Email, &cognitoSub, &createdAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrNotFound
 	}
 	if err != nil {
 		return User{}, fmt.Errorf("get user: %w", err)
+	}
+	if cognitoSub.Valid {
+		u.CognitoSub = cognitoSub.String
 	}
 	u.CreatedAt = parseTime(createdAt)
 	return u, nil

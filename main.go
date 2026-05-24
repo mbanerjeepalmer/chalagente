@@ -15,16 +15,18 @@ import (
 	"github.com/mbanerjeepalmer/chalagente/internal/voice"
 	"github.com/mbanerjeepalmer/chalagente/internal/wamanager"
 
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/joho/godotenv"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
 	waLog "go.mau.fi/whatsmeow/util/log"
 )
 
 func main() {
+	_ = godotenv.Load()
+
 	dbPath := getenv("DB_PATH", "./data/app.db")
 	httpAddr := getenv("HTTP_ADDR", ":8080")
-	baseURL := getenv("BASE_URL", "http://localhost:8080")
+	baseURL := getenv("BASE_URL", "https://chalagente.com")
 
 	if err := os.MkdirAll(dirOf(dbPath), 0o755); err != nil {
 		log.Fatalf("create data dir: %v", err)
@@ -53,16 +55,24 @@ func main() {
 	app := newApp()
 	app.Store = appStore
 	app.WAMgr = wam
-	app.Agent = buildAgent()
+	app.Agent = agent.NewMockEngine()
 	app.Voice = voice.NewCachedProvider(&voice.MockProvider{}, 256)
 	app.Maps = maps.DefaultMockClient()
 	app.BaseURL = baseURL
-	app.Auth = &auth.Handlers{
-		Store:        &storeAuthAdapter{s: appStore},
-		Mailer:       auth.ConsoleMailer{Logf: log.Printf},
+
+	cognitoAuth, err := auth.NewCognitoHandlers(ctx, &storeAuthAdapter{s: appStore}, auth.CognitoConfig{
+		Region:       requireEnv("COGNITO_REGION"),
+		UserPoolID:   requireEnv("COGNITO_USER_POOL_ID"),
+		ClientID:     requireEnv("COGNITO_CLIENT_ID"),
+		ClientSecret: requireEnv("COGNITO_CLIENT_SECRET"),
+		Domain:       requireEnv("COGNITO_DOMAIN"),
 		BaseURL:      baseURL,
 		CookieSecure: getenv("COOKIE_SECURE", "false") == "true",
+	})
+	if err != nil {
+		log.Fatalf("cognito auth: %v", err)
 	}
+	app.Auth = cognitoAuth
 
 	wam.SetEventHandler(app.handleWAEvent)
 
@@ -70,8 +80,11 @@ func main() {
 		log.Printf("boot tenants: %v", err)
 	}
 
-	go app.serveHTTP(httpAddr)
-	log.Printf("HTTP listening on %s", httpAddr)
+	go func() {
+		if err := app.serveHTTP(httpAddr); err != nil {
+			log.Fatalf("http server: %v", err)
+		}
+	}()
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
@@ -81,9 +94,6 @@ func main() {
 }
 
 func (a *App) bootPairedTenants(ctx context.Context) error {
-	// Iterate every business that has a wa_device_jid and connect it.
-	// We don't have a "list all businesses" helper yet; do a small inline
-	// query via the store's DB until we need a richer API.
 	rows, err := a.Store.DB().QueryContext(ctx,
 		`SELECT id, wa_device_jid FROM businesses WHERE wa_device_jid IS NOT NULL AND wa_device_jid != ''`)
 	if err != nil {
@@ -117,35 +127,12 @@ func getenv(k, def string) string {
 	return def
 }
 
-// buildAgent picks the best agent.Engine for the current environment:
-//   - if AWS_BEARER_TOKEN_BEDROCK is set, BedrockEngine is added to the chain;
-//   - if MISTRAL_API_KEY is set, MistralEngine is added (as a fallback if
-//     Bedrock is also configured, or as the only engine if not);
-//   - if neither is set, MockEngine — so dev and tests still work without keys.
-func buildAgent() agent.Engine {
-	var chain []agent.Engine
-	if tok := os.Getenv("AWS_BEARER_TOKEN_BEDROCK"); tok != "" {
-		region := getenv("AWS_REGION", "us-east-1")
-		model := getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0")
-		base := getenv("BEDROCK_ENDPOINT", fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com", region))
-		chain = append(chain, &agent.BedrockEngine{Token: tok, Model: model, BaseURL: base})
-		log.Printf("agent: bedrock enabled (model=%s)", model)
+func requireEnv(k string) string {
+	v := os.Getenv(k)
+	if v == "" {
+		log.Fatalf("missing required env var %s", k)
 	}
-	if tok := os.Getenv("MISTRAL_API_KEY"); tok != "" {
-		model := getenv("MISTRAL_MODEL_ID", "mistral-small-latest")
-		base := getenv("MISTRAL_ENDPOINT", "https://api.mistral.ai")
-		chain = append(chain, &agent.MistralEngine{Token: tok, Model: model, BaseURL: base})
-		log.Printf("agent: mistral enabled (model=%s)", model)
-	}
-	switch len(chain) {
-	case 0:
-		log.Printf("agent: no LLM key set, using MockEngine")
-		return agent.NewMockEngine()
-	case 1:
-		return chain[0]
-	default:
-		return agent.FallbackEngine{Engines: chain}
-	}
+	return v
 }
 
 func dirOf(path string) string {

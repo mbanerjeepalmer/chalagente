@@ -19,7 +19,7 @@ type App struct {
 	Agent    agent.Engine
 	Voice    voice.Provider
 	Maps     maps.Client
-	Auth     *auth.Handlers
+	Auth     *auth.CognitoHandlers
 	BaseURL  string
 
 	busMu  sync.Mutex
