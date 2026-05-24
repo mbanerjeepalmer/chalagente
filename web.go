@@ -19,6 +19,12 @@ func (a *App) Mux() http.Handler {
 	mux.HandleFunc("/auth/verify", a.Auth.Verify)
 	mux.HandleFunc("POST /logout", a.Auth.Logout)
 
+	mux.HandleFunc("/demo", a.handleTryPage)
+	mux.HandleFunc("/demo/business", a.handleTryBusiness)
+	mux.HandleFunc("/demo/send", a.handleTrySend)
+	mux.HandleFunc("/demo/history", a.handleTryHistory)
+	mux.HandleFunc("/demo/reset", a.handleTryReset)
+
 	protected := http.NewServeMux()
 	protected.HandleFunc("/onboarding", a.handleOnboarding)
 	protected.HandleFunc("/onboarding/business", a.handleOnboardingBusiness)
@@ -152,7 +158,7 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!doctype html>
   <nav class="nav-links">
    <a href="#features">Características</a>
    <a href="#how">Cómo funciona</a>
-   <a href="/signup" class="btn btn-primary">Empezar</a>
+   <a href="/demo" class="btn btn-primary">Probar ahora</a>
   </nav>
  </div>
 </header>
@@ -163,9 +169,10 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!doctype html>
    <h1 class="hero-title">Responde a tus clientes <span class="grad">al instante</span>, sin levantar el teléfono.</h1>
    <p class="hero-sub">Chalagente es un agente de IA que atiende las preguntas de tu negocio por WhatsApp — el canal donde tus clientes ya están — las 24 horas del día.</p>
    <div class="hero-cta">
-    <a href="/signup" class="btn btn-primary">Crear cuenta →</a>
-    <a href="#how" class="btn btn-ghost">Ver cómo funciona</a>
+    <a href="/demo" class="btn btn-primary">Probar ahora →</a>
+    <a href="/signup" class="btn btn-ghost">Crear cuenta</a>
    </div>
+   <p style="margin-top:.6rem;color:var(--muted);font-size:.85rem">Sin registro · Chatea con un agente de demo en 5 segundos</p>
   </div>
   <div class="phone" aria-hidden="true">
    <div class="phone-screen">
@@ -200,8 +207,8 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!doctype html>
  <div class="container">
   <div class="cta">
    <h2>¿Listo para no perder otro mensaje?</h2>
-   <p>Crea tu cuenta y activa tu agente en minutos.</p>
-   <a href="/signup" class="btn btn-primary">Empezar gratis</a>
+   <p>Prueba el agente ahora mismo, sin registrarte. Luego conecta tu WhatsApp en minutos.</p>
+   <a href="/demo" class="btn btn-primary">Probar el agente →</a>
   </div>
  </div>
 </section>

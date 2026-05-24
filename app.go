@@ -31,6 +31,9 @@ type App struct {
 
 	demoOnce  sync.Once
 	demoState *demoHistory
+
+	tryOnce  sync.Once
+	tryState *tryStore
 }
 
 type Event struct {
