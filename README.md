@@ -33,11 +33,9 @@ docker run --rm -it -v "$PWD/data:/data" -p 8080:8080 chalagente
 
 ## Web UI
 
-Open `http://localhost:8080/` to:
-- Scan the QR code in your browser (no terminal needed).
-- See connection status and the linked JID.
-- Send a message to any number.
-- Watch a live feed of incoming and outgoing messages.
+- `http://localhost:8080/` — public landing page.
+- `http://localhost:8080/admin` — admin UI (Basic Auth): pair WhatsApp, send
+  messages, and watch the live feed.
 
 ## Demo mode
 
@@ -53,10 +51,11 @@ Open `/demo` in one tab and `/demo/bot` in another. Messages sent from the bot p
 
 ## Endpoints
 
-- `GET /` — web UI (Basic Auth).
-- `GET /qr.png` — current pairing QR as PNG, `404` once paired.
-- `POST /send` — form: `to`, `text`. Redirects to `/`.
-- `GET /events` — Server-Sent Events stream of message activity.
+- `GET /` — landing page (public).
+- `GET /admin` — admin UI (Basic Auth).
+- `GET /admin/qr.png` — current pairing QR as PNG, `404` once paired.
+- `POST /admin/send` — form: `to`, `text`. Redirects to `/admin`.
+- `GET /admin/events` — Server-Sent Events stream of message activity.
 - `GET /healthz` — `200 ok` once connected and logged in, else `503`.
 - `GET /demo` — demo chat UI (public).
 - `GET /demo/bot` — demo control panel (Basic Auth).
@@ -70,7 +69,7 @@ Open `/demo` in one tab and `/demo/bot` in another. Messages sent from the bot p
 | `STORE_PATH`       | no       | `./data/store.db`  |
 | `HTTP_ADDR`        | no       | `:8080`            |
 
-The admin web UI (`/`, `/send`, `/events`, `/demo/bot`) is protected with HTTP
-Basic Auth. The service refuses to start if either credential is unset.
-`/healthz` and `/demo` (including `/demo/events` and `/demo/media/*`) are
-intentionally left open.
+The admin web UI (`/admin`, `/admin/send`, `/admin/events`, `/demo/bot`) is
+protected with HTTP Basic Auth. The service refuses to start if either
+credential is unset. `/`, `/healthz`, and `/demo` (including `/demo/events`
+and `/demo/media/*`) are intentionally left open.
