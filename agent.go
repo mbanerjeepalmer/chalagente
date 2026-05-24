@@ -53,6 +53,120 @@ func (s *scriptedReplier) Reset() {
 	s.idx = map[string]int{}
 }
 
+type fallbackReplier struct {
+	replier []Replier
+}
+
+func (f *fallbackReplier) Reply(ctx context.Context, chat, text string) (string, bool, error) {
+	var lastErr error
+	for _, r := range f.replier {
+		reply, ok, err := r.Reply(ctx, chat, text)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		return reply, ok, nil
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no replier configured")
+	}
+	return "", false, lastErr
+}
+
+type chatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type mistralReplier struct {
+	endpoint     string
+	token        string
+	model        string
+	systemPrompt string
+	httpClient   *http.Client
+
+	mu      sync.Mutex
+	history map[string][]chatMessage
+}
+
+func newMistralReplier(endpoint, token, model, systemPrompt string) *mistralReplier {
+	return &mistralReplier{
+		endpoint:     strings.TrimRight(endpoint, "/"),
+		token:        token,
+		model:        model,
+		systemPrompt: systemPrompt,
+		httpClient:   &http.Client{Timeout: 30 * time.Second},
+		history:      map[string][]chatMessage{},
+	}
+}
+
+func (m *mistralReplier) Reply(ctx context.Context, chat, text string) (string, bool, error) {
+	m.mu.Lock()
+	hist := append([]chatMessage(nil), m.history[chat]...)
+	m.mu.Unlock()
+
+	hist = append(hist, chatMessage{Role: "user", Content: text})
+
+	msgs := make([]chatMessage, 0, len(hist)+1)
+	if m.systemPrompt != "" {
+		msgs = append(msgs, chatMessage{Role: "system", Content: m.systemPrompt})
+	}
+	msgs = append(msgs, hist...)
+
+	body, err := json.Marshal(map[string]interface{}{
+		"model":    m.model,
+		"messages": msgs,
+	})
+	if err != nil {
+		return "", false, err
+	}
+
+	url := m.endpoint + "/v1/chat/completions"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", false, err
+	}
+	req.Header.Set("Authorization", "Bearer "+m.token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	client := m.httpClient
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", false, err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode/100 != 2 {
+		return "", false, fmt.Errorf("mistral %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var parsed struct {
+		Choices []struct {
+			Message chatMessage `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return "", false, fmt.Errorf("decode mistral response: %w", err)
+	}
+	if len(parsed.Choices) == 0 || parsed.Choices[0].Message.Content == "" {
+		return "", false, fmt.Errorf("empty mistral reply")
+	}
+	reply := parsed.Choices[0].Message.Content
+
+	m.mu.Lock()
+	if m.history == nil {
+		m.history = map[string][]chatMessage{}
+	}
+	m.history[chat] = append(m.history[chat], hist[len(hist)-1], chatMessage{Role: "assistant", Content: reply})
+	m.mu.Unlock()
+
+	return reply, true, nil
+}
+
 type bedrockMessage struct {
 	Role    string                   `json:"role"`
 	Content []map[string]interface{} `json:"content"`

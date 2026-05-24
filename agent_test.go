@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -170,6 +171,121 @@ func TestBedrockReplier_MultiTurnHistory(t *testing.T) {
 	msgs, _ := payload["messages"].([]any)
 	if len(msgs) != 3 {
 		t.Fatalf("expected 3 messages after 2 turns, got %d: %s", len(msgs), lastBody)
+	}
+}
+
+func TestMistralReplier_RequestAndResponse(t *testing.T) {
+	var gotPath, gotAuth, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotAuth = r.Header.Get("Authorization")
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"hola amigo"}}]}`))
+	}))
+	defer srv.Close()
+
+	mr := &mistralReplier{
+		endpoint:     srv.URL,
+		token:        "tok-m",
+		model:        "mistral-small-latest",
+		systemPrompt: "be brief",
+		httpClient:   srv.Client(),
+	}
+	got, ok, err := mr.Reply(context.Background(), "c", "hello")
+	if err != nil || !ok || got != "hola amigo" {
+		t.Fatalf("got %q ok=%v err=%v", got, ok, err)
+	}
+	if gotPath != "/v1/chat/completions" {
+		t.Fatalf("path = %q", gotPath)
+	}
+	if gotAuth != "Bearer tok-m" {
+		t.Fatalf("auth = %q", gotAuth)
+	}
+	var payload struct {
+		Model    string                   `json:"model"`
+		Messages []map[string]interface{} `json:"messages"`
+	}
+	if err := json.Unmarshal([]byte(gotBody), &payload); err != nil {
+		t.Fatalf("body not json: %v\n%s", err, gotBody)
+	}
+	if payload.Model != "mistral-small-latest" {
+		t.Fatalf("model = %q", payload.Model)
+	}
+	if len(payload.Messages) != 2 {
+		t.Fatalf("expected 2 messages (system+user), got %d", len(payload.Messages))
+	}
+	if payload.Messages[0]["role"] != "system" {
+		t.Fatalf("first message role = %v", payload.Messages[0]["role"])
+	}
+}
+
+func TestMistralReplier_MultiTurnHistory(t *testing.T) {
+	var lastBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		lastBody = string(b)
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ack"}}]}`))
+	}))
+	defer srv.Close()
+	mr := &mistralReplier{endpoint: srv.URL, token: "t", model: "m", httpClient: srv.Client()}
+	_, _, _ = mr.Reply(context.Background(), "c", "msg1")
+	_, _, _ = mr.Reply(context.Background(), "c", "msg2")
+
+	var payload struct {
+		Messages []map[string]interface{} `json:"messages"`
+	}
+	_ = json.Unmarshal([]byte(lastBody), &payload)
+	if len(payload.Messages) != 3 {
+		t.Fatalf("expected 3 messages after 2 turns, got %d: %s", len(payload.Messages), lastBody)
+	}
+}
+
+type stubReplier struct {
+	reply string
+	ok    bool
+	err   error
+	calls int
+}
+
+func (s *stubReplier) Reply(_ context.Context, _, _ string) (string, bool, error) {
+	s.calls++
+	return s.reply, s.ok, s.err
+}
+
+func TestFallbackReplier_PrimarySucceeds(t *testing.T) {
+	primary := &stubReplier{reply: "P", ok: true}
+	secondary := &stubReplier{reply: "S", ok: true}
+	f := &fallbackReplier{replier: []Replier{primary, secondary}}
+	got, ok, err := f.Reply(context.Background(), "c", "x")
+	if err != nil || !ok || got != "P" {
+		t.Fatalf("got %q ok=%v err=%v", got, ok, err)
+	}
+	if secondary.calls != 0 {
+		t.Fatalf("secondary should not be called; calls=%d", secondary.calls)
+	}
+}
+
+func TestFallbackReplier_PrimaryErrorsFallsThrough(t *testing.T) {
+	primary := &stubReplier{err: fmt.Errorf("boom")}
+	secondary := &stubReplier{reply: "S", ok: true}
+	f := &fallbackReplier{replier: []Replier{primary, secondary}}
+	got, ok, err := f.Reply(context.Background(), "c", "x")
+	if err != nil || !ok || got != "S" {
+		t.Fatalf("got %q ok=%v err=%v", got, ok, err)
+	}
+	if secondary.calls != 1 {
+		t.Fatalf("secondary should be called once; calls=%d", secondary.calls)
+	}
+}
+
+func TestFallbackReplier_AllFail(t *testing.T) {
+	primary := &stubReplier{err: fmt.Errorf("boom1")}
+	secondary := &stubReplier{err: fmt.Errorf("boom2")}
+	f := &fallbackReplier{replier: []Replier{primary, secondary}}
+	_, _, err := f.Reply(context.Background(), "c", "x")
+	if err == nil {
+		t.Fatalf("expected error when all replier fail")
 	}
 }
 

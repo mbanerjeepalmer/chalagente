@@ -256,17 +256,32 @@ func (a *App) handleEvent(evt interface{}) {
 const defaultSystemPrompt = `You are Chalagente, a friendly WhatsApp customer-service assistant for a small business. Reply concisely (1-3 sentences), in the same language the customer uses (default Spanish). Be warm, professional, and direct.`
 
 func configureAgent(app *App) {
-	tok := os.Getenv("AWS_BEARER_TOKEN_BEDROCK")
-	if tok == "" {
-		log.Printf("AWS_BEARER_TOKEN_BEDROCK not set; agent mode unavailable")
-		return
-	}
-	region := getenv("AWS_REGION", "us-east-1")
-	model := getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0")
-	endpoint := getenv("BEDROCK_ENDPOINT", fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com", region))
 	systemPrompt := getenv("AGENT_SYSTEM_PROMPT", defaultSystemPrompt)
-	app.agent = newBedrockReplier(endpoint, tok, model, systemPrompt)
-	log.Printf("bedrock agent enabled (model=%s)", model)
+	var chain []Replier
+
+	if tok := os.Getenv("AWS_BEARER_TOKEN_BEDROCK"); tok != "" {
+		region := getenv("AWS_REGION", "us-east-1")
+		model := getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0")
+		endpoint := getenv("BEDROCK_ENDPOINT", fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com", region))
+		chain = append(chain, newBedrockReplier(endpoint, tok, model, systemPrompt))
+		log.Printf("bedrock agent enabled (model=%s)", model)
+	}
+	if tok := os.Getenv("MISTRAL_API_KEY"); tok != "" {
+		model := getenv("MISTRAL_MODEL_ID", "mistral-small-latest")
+		endpoint := getenv("MISTRAL_ENDPOINT", "https://api.mistral.ai")
+		chain = append(chain, newMistralReplier(endpoint, tok, model, systemPrompt))
+		log.Printf("mistral fallback enabled (model=%s)", model)
+	}
+
+	switch len(chain) {
+	case 0:
+		log.Printf("no agent provider configured (set AWS_BEARER_TOKEN_BEDROCK or MISTRAL_API_KEY); agent mode unavailable")
+		return
+	case 1:
+		app.agent = chain[0]
+	default:
+		app.agent = &fallbackReplier{replier: chain}
+	}
 	if os.Getenv("DEFAULT_MODE") == "agent" {
 		_ = app.setMode("agent")
 	}
