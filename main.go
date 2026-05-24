@@ -61,6 +61,16 @@ func (a *App) nextResponse(chat string) (string, bool) {
 	return hardcodedResponses[i], true
 }
 
+func (a *App) sessionSnapshot() map[string]int {
+	a.sessionMu.Lock()
+	defer a.sessionMu.Unlock()
+	out := make(map[string]int, len(a.sessionIdx))
+	for k, v := range a.sessionIdx {
+		out[k] = v
+	}
+	return out
+}
+
 func (a *App) resetSessions() {
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()

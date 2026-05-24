@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -351,6 +352,17 @@ var pageTmpl = template.Must(template.New("page").Parse(`<!doctype html>
  .flash { background: #eef; border: 1px solid #99c; padding: .5rem; border-radius: 4px; margin-bottom: 1rem; }
  .err   { background: #fee; border-color: #c99; }
  img.qr { image-rendering: pixelated; width: 256px; height: 256px; }
+ .script { list-style: none; padding: 0; margin: 0; }
+ .script li { padding: .6rem .75rem; border: 1px solid #e3e3e3; border-radius: 6px; margin-bottom: .5rem; background: #fafafa; }
+ .script li.done { opacity: .55; background: #f0f4ef; }
+ .script li.next { border-color: #1a7f37; background: #e6f4ea; }
+ .script .topic { font-weight: 600; font-size: .85em; color: #1a4f7a; }
+ .script .trig { font-size: .8em; color: #555; font-style: italic; margin: .15rem 0; }
+ .script .reply { font-size: .9em; }
+ .script .badge { float: right; font-size: .7em; padding: 1px 6px; border-radius: 10px; background: #ddd; color: #333; }
+ .script li.done .badge { background: #cfe3cf; color: #054f31; }
+ .script li.next .badge { background: #1a7f37; color: white; }
+ .sessions { font-family: ui-monospace, monospace; font-size: .8em; color: #555; }
 </style>
 </head>
 <body>
@@ -366,11 +378,26 @@ var pageTmpl = template.Must(template.New("page").Parse(`<!doctype html>
 </section>
 
 <section>
- <h2>Session</h2>
- <p>Hardcoded responses cycle through {{ .ResponseCount }} messages per chat. Reset to start over.</p>
+ <h2>Scripted responses</h2>
+ <p>Each incoming message advances the chat by one step. After step {{ .ResponseCount }}, the bot stops replying until reset.</p>
  <form method="POST" action="/admin/reset-session">
   <button>Reset session</button>
  </form>
+ {{ if .Sessions }}
+ <p class="sessions">Active chats:
+  {{ range .Sessions }}<br>· {{ .Chat }} — step {{ .Idx }}/{{ $.ResponseCount }}{{ end }}
+ </p>
+ {{ end }}
+ <ol class="script">
+  {{ range .Script }}
+  <li>
+   <span class="badge">#{{ .Num }}</span>
+   <div class="topic">{{ .Topic }}</div>
+   <div class="trig">Expected message: {{ .Triggers }}</div>
+   <div class="reply">{{ .Reply }}</div>
+  </li>
+  {{ end }}
+ </ol>
 </section>
 
 {{ if not .LoggedIn }}
@@ -421,6 +448,20 @@ type pageData struct {
 	Flash         string
 	FlashErr      bool
 	ResponseCount int
+	Script        []scriptRow
+	Sessions      []sessionRow
+}
+
+type scriptRow struct {
+	Num      int
+	Topic    string
+	Triggers string
+	Reply    string
+}
+
+type sessionRow struct {
+	Chat string
+	Idx  int
 }
 
 func (a *App) serveHTTP(addr string) {
@@ -485,6 +526,16 @@ func (a *App) handleAdmin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	qrCode, _ := a.qr()
+	script := make([]scriptRow, len(hardcodedScript))
+	for i, s := range hardcodedScript {
+		script[i] = scriptRow{Num: i + 1, Topic: s.Topic, Triggers: s.Triggers, Reply: s.Reply}
+	}
+	snap := a.sessionSnapshot()
+	sessions := make([]sessionRow, 0, len(snap))
+	for chat, idx := range snap {
+		sessions = append(sessions, sessionRow{Chat: chat, Idx: idx})
+	}
+	sort.Slice(sessions, func(i, j int) bool { return sessions[i].Chat < sessions[j].Chat })
 	data := pageData{
 		LoggedIn:      a.client.IsLoggedIn(),
 		Connected:     a.client.IsConnected(),
@@ -493,6 +544,8 @@ func (a *App) handleAdmin(w http.ResponseWriter, r *http.Request) {
 		Flash:         r.URL.Query().Get("flash"),
 		FlashErr:      r.URL.Query().Get("err") == "1",
 		ResponseCount: len(hardcodedResponses),
+		Script:        script,
+		Sessions:      sessions,
 	}
 	if id := a.client.Store.ID; id != nil {
 		data.JID = id.String()

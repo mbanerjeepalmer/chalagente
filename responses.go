@@ -8,20 +8,52 @@ import (
 //go:embed docs/v1.5_responses.md
 var responsesMD string
 
-var hardcodedResponses = parseResponses(responsesMD)
+type ScriptStep struct {
+	Topic    string
+	Triggers string
+	Reply    string
+}
 
-func parseResponses(md string) []string {
-	var out []string
-	for _, line := range strings.Split(md, "\n") {
-		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, ">") {
-			continue
-		}
-		body := strings.TrimSpace(strings.TrimPrefix(line, ">"))
-		if !strings.HasPrefix(body, `"`) {
-			continue
-		}
-		out = append(out, strings.Trim(body, `"`))
+var (
+	hardcodedScript    = parseScript(responsesMD)
+	hardcodedResponses = replies(hardcodedScript)
+)
+
+func replies(steps []ScriptStep) []string {
+	out := make([]string, len(steps))
+	for i, s := range steps {
+		out[i] = s.Reply
 	}
+	return out
+}
+
+func parseScript(md string) []ScriptStep {
+	var out []ScriptStep
+	var cur ScriptStep
+	flush := func() {
+		if cur.Reply != "" {
+			out = append(out, cur)
+		}
+		cur = ScriptStep{}
+	}
+	for _, line := range strings.Split(md, "\n") {
+		t := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(t, "## "):
+			flush()
+			cur.Topic = strings.TrimSpace(strings.TrimLeft(t, "# "))
+			if i := strings.Index(cur.Topic, ". "); i >= 0 {
+				cur.Topic = cur.Topic[i+2:]
+			}
+		case strings.HasPrefix(t, "**Trigger:**"):
+			cur.Triggers = strings.TrimSpace(strings.TrimPrefix(t, "**Trigger:**"))
+		case strings.HasPrefix(t, ">"):
+			body := strings.TrimSpace(strings.TrimPrefix(t, ">"))
+			if strings.HasPrefix(body, `"`) {
+				cur.Reply = strings.Trim(body, `"`)
+			}
+		}
+	}
+	flush()
 	return out
 }
