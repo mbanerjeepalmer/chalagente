@@ -371,6 +371,15 @@ var pageTmpl = template.Must(template.New("page").Parse(`<!doctype html>
 {{ if .Flash }}<div class="flash {{ if .FlashErr }}err{{ end }}">{{ .Flash }}</div>{{ end }}
 
 <section>
+ <h2>Reply mode</h2>
+ <p>Current: <strong>{{ .Mode }}</strong>{{ if not .AgentAvailable }} <em>(agent unavailable — AWS_BEARER_TOKEN_BEDROCK not set)</em>{{ end }}</p>
+ <form method="POST" action="/admin/mode">
+  <button name="mode" value="scripted"{{ if eq .Mode "scripted" }} disabled{{ end }}>Use scripted</button>
+  <button name="mode" value="agent"{{ if or (eq .Mode "agent") (not .AgentAvailable) }} disabled{{ end }}>Use agent</button>
+ </form>
+</section>
+
+<section>
  <strong>Status:</strong>
  {{ if .LoggedIn }}<span class="status ok">paired · {{ .JID }}</span>
  {{ else }}<span class="status bad">not paired</span>{{ end }}
@@ -440,16 +449,18 @@ var pageTmpl = template.Must(template.New("page").Parse(`<!doctype html>
 </html>`))
 
 type pageData struct {
-	LoggedIn      bool
-	Connected     bool
-	JID           string
-	HasQR         bool
-	Now           int64
-	Flash         string
-	FlashErr      bool
-	ResponseCount int
-	Script        []scriptRow
-	Sessions      []sessionRow
+	LoggedIn       bool
+	Connected      bool
+	JID            string
+	HasQR          bool
+	Now            int64
+	Flash          string
+	FlashErr       bool
+	ResponseCount  int
+	Script         []scriptRow
+	Sessions       []sessionRow
+	Mode           string
+	AgentAvailable bool
 }
 
 type scriptRow struct {
@@ -478,6 +489,7 @@ func (a *App) serveHTTP(addr string) {
 	admin.HandleFunc("/admin/send", a.handleSend)
 	admin.HandleFunc("/admin/events", a.handleEvents)
 	admin.HandleFunc("/admin/reset-session", a.handleResetSession)
+	admin.HandleFunc("/admin/mode", a.handleSetMode)
 
 	protected := basicAuth(admin, user, pass)
 
@@ -537,18 +549,22 @@ func (a *App) handleAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Slice(sessions, func(i, j int) bool { return sessions[i].Chat < sessions[j].Chat })
 	data := pageData{
-		LoggedIn:      a.client.IsLoggedIn(),
-		Connected:     a.client.IsConnected(),
-		HasQR:         qrCode != "",
-		Now:           time.Now().UnixNano(),
-		Flash:         r.URL.Query().Get("flash"),
-		FlashErr:      r.URL.Query().Get("err") == "1",
-		ResponseCount: len(hardcodedResponses),
-		Script:        script,
-		Sessions:      sessions,
+		LoggedIn:       a.isLoggedIn(),
+		Connected:      a.isConnected(),
+		HasQR:          qrCode != "",
+		Now:            time.Now().UnixNano(),
+		Flash:          r.URL.Query().Get("flash"),
+		FlashErr:       r.URL.Query().Get("err") == "1",
+		ResponseCount:  len(hardcodedResponses),
+		Script:         script,
+		Sessions:       sessions,
+		Mode:           a.mode(),
+		AgentAvailable: a.agent != nil,
 	}
-	if id := a.client.Store.ID; id != nil {
-		data.JID = id.String()
+	if a.client != nil && a.client.Store != nil {
+		if id := a.client.Store.ID; id != nil {
+			data.JID = id.String()
+		}
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -578,7 +594,7 @@ func (a *App) handleSend(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !a.client.IsLoggedIn() {
+	if !a.isLoggedIn() {
 		redirectFlash(w, r, "not paired yet", true)
 		return
 	}
@@ -633,6 +649,27 @@ func redirectFlash(w http.ResponseWriter, r *http.Request, msg string, isErr boo
 		q.Set("err", "1")
 	}
 	http.Redirect(w, r, "/admin?"+q.Encode(), http.StatusSeeOther)
+}
+
+func (a *App) handleSetMode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		redirectFlash(w, r, "bad form: "+err.Error(), true)
+		return
+	}
+	m := strings.TrimSpace(r.PostForm.Get("mode"))
+	if m == "agent" && a.agent == nil {
+		redirectFlash(w, r, "agent unavailable (AWS_BEARER_TOKEN_BEDROCK not set)", true)
+		return
+	}
+	if err := a.setMode(m); err != nil {
+		redirectFlash(w, r, err.Error(), true)
+		return
+	}
+	redirectFlash(w, r, "mode set to "+m, false)
 }
 
 func (a *App) handleResetSession(w http.ResponseWriter, r *http.Request) {
@@ -691,7 +728,12 @@ func writeSSE(w http.ResponseWriter, e Event) {
 }
 
 func (a *App) handleHealth(w http.ResponseWriter, _ *http.Request) {
-	if a.client.IsConnected() && a.client.IsLoggedIn() {
+	if a.client == nil {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok (http-only)"))
+		return
+	}
+	if a.isConnected() && a.isLoggedIn() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 		return
