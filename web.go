@@ -25,8 +25,8 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Chalagente — Atención al cliente por WhatsApp con IA</title>
-<meta name="description" content="Un agente de IA que responde las preguntas de tus clientes en WhatsApp, 24/7. Sin apps nuevas, sin fricción.">
+<title>Chalagente — Llena tu WhatsApp durante la Copa del Mundo 2026</title>
+<meta name="description" content="Chalagente responde por WhatsApp con audios de voz en español mexicano, al instante. Pensado para restaurantes que no quieren perder mesas durante la Copa del Mundo 2026.">
 <style>
  :root {
   --bg: #0b0f14;
@@ -203,11 +203,86 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!doctype html>
 
  footer { padding: 2rem 0 3rem; color: var(--muted); font-size: .85rem; text-align: center; border-top: 1px solid var(--border); margin-top: 2rem; }
 
+ /* Story / narrative blocks */
+ .lede {
+  font-size: clamp(1.05rem, 1.4vw, 1.2rem);
+  color: #c8d2de; max-width: 38rem; margin: 0 auto 2rem; text-align: center;
+ }
+ .lede strong { color: var(--text); }
+ .story p { max-width: 38rem; margin: 0 auto 1.1rem; color: #c8d2de; font-size: 1.05rem; }
+ .story p.center { text-align: center; }
+ .story .pullquote {
+  max-width: 36rem; margin: 2rem auto;
+  border-left: 3px solid var(--accent);
+  padding: .6rem 1.2rem; color: var(--text); font-style: italic; font-size: 1.1rem;
+ }
+
+ .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: 2.5rem 0 1rem; }
+ .stat {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 1.5rem; text-align: center;
+ }
+ .stat .num {
+  font-size: clamp(1.8rem, 3vw, 2.4rem); font-weight: 800; letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #ff8a8a, #ffb27a);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+ }
+ .stat.good .num { background: linear-gradient(135deg, #7be4a8, var(--accent)); -webkit-background-clip: text; background-clip: text; }
+ .stat .lbl { color: var(--muted); font-size: .88rem; margin-top: .35rem; }
+
+ .qa-table {
+  width: 100%; border-collapse: collapse;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden;
+ }
+ .qa-table th, .qa-table td {
+  padding: .85rem 1rem; text-align: left; font-size: .95rem;
+  border-bottom: 1px solid var(--border); vertical-align: top;
+ }
+ .qa-table th { background: rgba(37,211,102,0.08); color: #c8d2de; font-weight: 600; font-size: .85em; letter-spacing: .03em; text-transform: uppercase; }
+ .qa-table tr:last-child td { border-bottom: 0; }
+ .qa-table td:first-child { color: var(--text); font-weight: 600; width: 38%; }
+ .qa-table td:last-child { color: var(--muted); }
+
+ .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem 0; }
+ .compare .card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 1.5rem;
+ }
+ .compare .card.before { border-top: 3px solid #c75757; }
+ .compare .card.after  { border-top: 3px solid var(--accent); }
+ .compare h3 { margin: 0 0 .75rem; font-size: 1rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+ .compare ul { margin: 0; padding-left: 1.1rem; color: #c8d2de; }
+ .compare li { margin-bottom: .4rem; }
+
+ /* Audio bubble */
+ .bubble.audio { display: flex; align-items: center; gap: .55rem; min-width: 60%; }
+ .bubble.audio .play {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(255,255,255,0.2); display: grid; place-items: center; font-size: .8rem;
+  flex-shrink: 0;
+ }
+ .bubble.audio .wave {
+  flex: 1; display: flex; align-items: center; gap: 2px; height: 18px;
+ }
+ .bubble.audio .wave span {
+  display: block; width: 2px; background: rgba(255,255,255,0.65); border-radius: 1px;
+ }
+ .bubble.audio .dur { font-size: .7rem; opacity: .8; }
+
+ .urgency {
+  background: rgba(255,138,138,0.08); border: 1px solid rgba(255,138,138,0.25);
+  border-radius: var(--radius); padding: 1.2rem 1.5rem; margin: 1.5rem auto; max-width: 38rem;
+  color: #ffd0d0; text-align: center; font-size: 1rem;
+ }
+ .urgency strong { color: #ffb27a; }
+
  @media (max-width: 820px) {
   .hero-grid { grid-template-columns: 1fr; }
-  .features, .steps { grid-template-columns: 1fr; }
+  .features, .steps, .stats, .compare { grid-template-columns: 1fr; }
   .phone { width: 280px; }
   .nav-links a:not(.btn) { display: none; }
+  .qa-table th, .qa-table td { font-size: .88rem; padding: .65rem .75rem; }
  }
 </style>
 </head>
@@ -220,9 +295,10 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!doctype html>
    <span>Chalagente</span>
   </div>
   <nav class="nav-links">
-   <a href="#features">Características</a>
-   <a href="#how">Cómo funciona</a>
-   <a href="#contact" class="btn btn-ghost">Solicitar acceso</a>
+   <a href="#historia">Historia</a>
+   <a href="#como">Cómo funciona</a>
+   <a href="/pitch">Pitch completo</a>
+   <a href="#contacto" class="btn btn-ghost">Empezar</a>
   </nav>
  </div>
 </header>
@@ -230,101 +306,165 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!doctype html>
 <section class="hero">
  <div class="container hero-grid">
   <div>
-   <span class="eyebrow"><span class="dot"></span> IA conversacional para WhatsApp</span>
-   <h1 class="hero-title">Responde a tus clientes <span class="grad">al instante</span>, sin levantar el teléfono.</h1>
-   <p class="hero-sub">Chalagente es un agente de IA que atiende las preguntas frecuentes de tu negocio por WhatsApp — el canal donde tus clientes ya están — las 24 horas del día.</p>
+   <span class="eyebrow"><span class="dot"></span> Copa del Mundo 2026 · CDMX</span>
+   <h1 class="hero-title">La Copa llena tu restaurante. <span class="grad">Chalagente llena tu WhatsApp.</span></h1>
+   <p class="hero-sub">Responde cada mensaje al instante — con un <strong>audio de voz</strong> en español mexicano. Sin contratar a nadie nuevo, sin perder mesas con quien responde primero.</p>
    <div class="hero-cta">
-    <a href="#contact" class="btn btn-primary">Empezar ahora →</a>
-    <a href="#how" class="btn btn-ghost">Ver cómo funciona</a>
+    <a href="#contacto" class="btn btn-primary">Quiero conectar mi WhatsApp →</a>
+    <a href="/pitch" class="btn btn-ghost">Ver pitch completo</a>
    </div>
    <div class="hero-meta">
-    <span>Sin apps nuevas</span>
-    <span>Activación en minutos</span>
-    <span>Habla como tú</span>
+    <span>Respuesta en menos de 1 segundo</span>
+    <span>Audio de voz, no solo texto</span>
+    <span>Activación en 5 minutos</span>
    </div>
   </div>
 
   <div class="phone" aria-hidden="true">
    <div class="phone-screen">
     <div class="phone-header">
-     <div class="avatar">C</div>
+     <div class="avatar">T</div>
      <div>
-      <div class="name">Tu Negocio</div>
+      <div class="name">La Terraza Reforma</div>
       <div class="sub">en línea</div>
      </div>
     </div>
     <div class="chat">
-     <div class="bubble in">Hola, ¿a qué hora abren mañana?</div>
-     <div class="bubble out">¡Hola! Abrimos de 9:00 a 20:00 todos los días 🙌</div>
-     <div class="bubble in">¿Aceptan tarjeta?</div>
-     <div class="bubble out">Sí, aceptamos todas las tarjetas y también transferencia.</div>
+     <div class="bubble in">¿Cuánto cuesta reservar mesa para el partido del sábado?</div>
+     <div class="bubble out audio">
+      <div class="play">▶</div>
+      <div class="wave">
+       <span style="height:6px"></span><span style="height:12px"></span><span style="height:8px"></span>
+       <span style="height:16px"></span><span style="height:10px"></span><span style="height:14px"></span>
+       <span style="height:7px"></span><span style="height:13px"></span><span style="height:9px"></span>
+       <span style="height:15px"></span><span style="height:6px"></span><span style="height:11px"></span>
+       <span style="height:8px"></span><span style="height:14px"></span><span style="height:10px"></span>
+      </div>
+      <span class="dur">0:08</span>
+     </div>
+     <div class="bubble in">¿Y hay estacionamiento cerca del Ángel?</div>
+     <div class="bubble out audio">
+      <div class="play">▶</div>
+      <div class="wave">
+       <span style="height:7px"></span><span style="height:14px"></span><span style="height:9px"></span>
+       <span style="height:12px"></span><span style="height:16px"></span><span style="height:8px"></span>
+       <span style="height:13px"></span><span style="height:10px"></span><span style="height:15px"></span>
+       <span style="height:6px"></span><span style="height:11px"></span><span style="height:14px"></span>
+      </div>
+      <span class="dur">0:06</span>
+     </div>
     </div>
    </div>
   </div>
  </div>
 </section>
 
-<section id="features" class="block">
+<section id="historia" class="block">
  <div class="container">
   <div class="section-head">
-   <h2>Todo lo que necesitas para automatizar la atención</h2>
-   <p>Pensado para pequeños y medianos negocios que viven en WhatsApp.</p>
+   <h2>Este es Juan.</h2>
+   <p>Juan tiene <strong>La Terraza Reforma</strong>, un restaurante en la colonia Juárez, a dos cuadras del Ángel de la Independencia.</p>
   </div>
-  <div class="features">
-   <div class="feature">
-    <div class="icon">💬</div>
-    <h3>WhatsApp nativo</h3>
-    <p>Tus clientes escriben al mismo número de siempre. Sin descargas, sin formularios, sin fricción.</p>
+  <div class="story">
+   <p>Terraza con vista a Reforma, cervezas artesanales, pantallas para los partidos. Ocho años ahí. Sus clientes — oficinistas de las torres cercanas, grupos de Roma y Zona Rosa — le escriben por <strong>WhatsApp</strong> para reservar, preguntar precios o armar paquetes para ver el fútbol.</p>
+   <p>Juan conoce a sus clientes. Les contesta con cariño. Así ha crecido.</p>
+   <p class="center"><strong>Pero se acerca la Copa del Mundo 2026.</strong></p>
+  </div>
+
+  <div class="stats">
+   <div class="stat">
+    <div class="num">147</div>
+    <div class="lbl">mensajes en 3 horas<br>(México vs Argentina, 2022)</div>
    </div>
-   <div class="feature">
-    <div class="icon">🤖</div>
-    <h3>Agente de IA</h3>
-    <p>Entrenado con la información de tu negocio: horarios, precios, ubicación, productos y políticas.</p>
+   <div class="stat">
+    <div class="num">38</div>
+    <div class="lbl">respondidos</div>
    </div>
-   <div class="feature">
-    <div class="icon">⚡</div>
-    <h3>Respuestas 24/7</h3>
-    <p>Atiende mientras duermes, en vacaciones o cuando estás con un cliente. Nunca pierdes una conversación.</p>
+   <div class="stat">
+    <div class="num">−$21,000</div>
+    <div class="lbl">en mesas perdidas<br>un solo fin de semana</div>
    </div>
+  </div>
+
+  <div class="story">
+   <p class="center">El lunes, tres clientes le dijeron lo mismo: <em>“Te escribí el sábado pero nadie me contestó. Fuimos al de Polanco.”</em></p>
+   <div class="pullquote">El 78% de los clientes compra con quien responde primero. En CDMX, entre el Ángel y Chapultepec hay un restaurante en cada esquina — quien no contesta, pierde la mesa al instante.</div>
+   <p class="center">Y la Copa no es un fin de semana. Son <strong>cinco semanas</strong> de partidos, noches seguidas, mensajes a las dos de la mañana.</p>
   </div>
  </div>
 </section>
 
-<section id="how" class="block">
+<section id="como" class="block">
  <div class="container">
   <div class="section-head">
-   <h2>Activo en tres pasos</h2>
-   <p>Desde el primer mensaje, en menos de una tarde.</p>
+   <h2>Entonces le presentan Chalagente.</h2>
+   <p>No es un chatbot que manda textos que nadie lee. Cuando un cliente pregunta algo, recibe en <strong>menos de un segundo</strong> un audio de voz — cálido, claro, en español mexicano.</p>
   </div>
-  <div class="steps">
-   <div class="step">
-    <h3>Conecta tu WhatsApp</h3>
-    <p>Vincula tu número escaneando un QR, igual que WhatsApp Web. Tu cuenta sigue siendo tuya.</p>
-   </div>
-   <div class="step">
-    <h3>Entrena al agente</h3>
-    <p>Cuéntale al agente sobre tu negocio. Nosotros nos encargamos de que aprenda a sonar como tú.</p>
-   </div>
-   <div class="step">
-    <h3>Empieza a responder</h3>
-    <p>El agente atiende las preguntas frecuentes. Tú solo intervienes cuando hace falta.</p>
-   </div>
-  </div>
+
+  <div class="pullquote" style="text-align:center">“El paquete partido incluye mesa reservada, cuatro cervezas y botana por persona desde $349. Aparta con $100 por WhatsApp y te confirmamos en minutos.”</div>
+
+  <p class="lede">La gente <strong>escucha</strong> el audio. No lo ignora.</p>
+
+  <table class="qa-table" aria-label="Lo que Chalagente responde">
+   <thead><tr><th>Pregunta del cliente</th><th>Lo que responde Chalagente</th></tr></thead>
+   <tbody>
+    <tr><td>Precio y paquetes</td><td>Tarifas, anticipo, promos</td></tr>
+    <tr><td>Horarios y partidos</td><td>Apertura especial, qué transmiten</td></tr>
+    <tr><td>Qué incluye</td><td>Cervezas, botana, mesa reservada</td></tr>
+    <tr><td>Grupos grandes</td><td>Mesas de 6+, descuentos</td></tr>
+    <tr><td>Ubicación</td><td>A dos cuadras del Ángel, estacionamiento en Juárez</td></tr>
+    <tr><td>Disponibilidad</td><td>Cupos limitados, urgencia real</td></tr>
+    <tr><td>Reservas</td><td>CTA directo: escribe “RESERVA”</td></tr>
+   </tbody>
+  </table>
+
+  <p class="lede" style="margin-top:2rem">Si preguntan algo fuera de lo habitual, Chalagente redirige a Juan — <strong>solo cuando ya vale la pena que intervenga un humano</strong>.</p>
  </div>
 </section>
 
-<section id="contact" class="block">
+<section class="block">
  <div class="container">
+  <div class="section-head">
+   <h2>Antes y después</h2>
+  </div>
+  <div class="compare">
+   <div class="card before">
+    <h3>Antes</h3>
+    <ul>
+     <li>147 mensajes recibidos</li>
+     <li>38 respondidos</li>
+     <li>$21,000 perdidos en un fin de semana</li>
+     <li>Clientes yéndose a Polanco</li>
+    </ul>
+   </div>
+   <div class="card after">
+    <h3>Después</h3>
+    <ul>
+     <li>147 mensajes recibidos</li>
+     <li><strong>147 respondidos al instante</strong></li>
+     <li>Juan sirve mesas en la terraza</li>
+     <li>Chalagente cierra ventas a las 2 AM, sin enfermarse, sin pedir aumento</li>
+    </ul>
+   </div>
+  </div>
+  <div class="pullquote" style="margin-top:2rem">“No reemplaza a mi equipo. Les quita lo repetitivo para que se concentren en llenar mesas.”</div>
+ </div>
+</section>
+
+<section id="contacto" class="block">
+ <div class="container">
+  <div class="urgency">La Copa arranca en <strong>menos de tres semanas</strong>. Cada día que contestas tarde, otra mesa se va al restaurante de enfrente.</div>
   <div class="cta">
-   <h2>¿Listo para no perder otro mensaje?</h2>
-   <p>Estamos incorporando los primeros negocios. Escríbenos y te ayudamos a montarlo.</p>
-   <a href="mailto:hola@chalagente.com" class="btn btn-primary">Solicitar acceso</a>
+   <h2>Un paso: escanea el QR.</h2>
+   <p>Chalagente empieza a responder. Tú te enfocas en servir.</p>
+   <a href="mailto:hola@chalagente.com" class="btn btn-primary">Quiero conectar mi WhatsApp →</a>
+   <p style="margin-top:1rem; font-size:.85rem"><a href="/pitch" style="color:var(--accent)">Leer el pitch completo →</a></p>
   </div>
  </div>
 </section>
 
 <footer>
- <div class="container">© Chalagente · Atención al cliente con IA por WhatsApp</div>
+ <div class="container">© Chalagente · La Copa del Mundo llena tu restaurante en Reforma. Chalagente llena tu WhatsApp.</div>
 </footer>
 
 </body>
@@ -483,6 +623,7 @@ func (a *App) serveHTTP(addr string) {
 
 	root := http.NewServeMux()
 	root.HandleFunc("/healthz", a.handleHealth)
+	root.HandleFunc("/pitch", a.handlePitch)
 	root.HandleFunc("/", a.handleLanding)
 	root.Handle("/admin", protected)
 	root.Handle("/admin/", protected)
