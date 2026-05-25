@@ -210,17 +210,69 @@ h1.hero-title { font-size: clamp(2.4rem, 5vw, 3.8rem); margin: 0 0 1rem; color: 
 h1.hero-title .accent { color: var(--terracotta-deep); font-style: italic; }
 .hero-sub { font-size: 1.15rem; color: var(--ink-soft); max-width: 32rem; margin: 0 0 1.75rem; }
 .hero-cta { display: flex; gap: .75rem; flex-wrap: wrap; }
-.muralcard {
-  background: var(--bone);
+.wa-mock {
+  background: #ece5dd;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 1.5rem 1.6rem;
-  box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 8px 28px rgba(40,30,15,0.08);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 12px 32px rgba(40,30,15,0.14);
+  transform: rotate(-0.6deg);
+  position: relative;
 }
-.muralcard .stripe { display: flex; height: 6px; margin: -1.5rem -1.6rem 1.2rem; border-radius: var(--radius) var(--radius) 0 0; overflow: hidden; }
-.muralcard .stripe span { flex: 1; }
-.muralcard h3 { margin: .25rem 0 .5rem; font-size: 1.4rem; }
-.muralcard p { margin: 0; color: var(--ink-soft); }
+.wa-mock::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, transparent 78%, rgba(241,234,217,0.95));
+}
+.wa-mock-head {
+  display: flex; align-items: center; gap: .55rem;
+  padding: .65rem .85rem;
+  background: #075e54; color: white;
+}
+.wa-mock-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: #25d366; color: #04130b;
+  display: grid; place-items: center;
+  font-family: "Cormorant Garamond", serif; font-weight: 700;
+}
+.wa-mock-meta { flex: 1; line-height: 1.2; }
+.wa-mock-name { font-weight: 600; font-size: .95rem; }
+.wa-mock-sub { font-size: .72rem; opacity: .85; }
+.wa-langs { display: flex; gap: .25rem; }
+.wa-lang {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: white;
+  padding: .2rem .35rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: .95rem;
+  line-height: 1;
+}
+.wa-lang.active { background: rgba(255,255,255,0.28); border-color: white; }
+.flagstack { letter-spacing: -0.35em; padding-right: .35em; }
+.wa-mock-body {
+  background: #ece5dd;
+  background-image:
+    radial-gradient(rgba(80,60,40,0.05) 1px, transparent 1px);
+  background-size: 4px 4px;
+  padding: 1rem .9rem 1.6rem;
+  display: flex; flex-direction: column; gap: .4rem;
+  min-height: 230px;
+}
+.wa-bubble {
+  max-width: 82%;
+  padding: .5rem .7rem;
+  font-size: .92rem; color: #1c1a16;
+  border-radius: 10px;
+  box-shadow: 0 1px 1px rgba(0,0,0,.08);
+  line-height: 1.4;
+}
+.wa-bubble.in { background: #dcf8c6; align-self: flex-end; border-bottom-right-radius: 2px; }
+.wa-bubble.out { background: white; align-self: flex-start; border-bottom-left-radius: 2px; }
+.wa-mock-foot {
+  padding: .45rem .9rem .65rem; font-size: .72rem; color: var(--muted);
+  background: var(--bone); border-top: 1px solid var(--line); text-align: center;
+}
 section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
 .section-head { max-width: 38rem; margin: 0 auto 2.5rem; text-align: center; }
 .section-head h2 { font-size: clamp(2rem, 3.5vw, 2.6rem); margin: 0 0 .5rem; }
@@ -281,16 +333,35 @@ section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
         <a href="/signup" class="btn btn-ghost">Iniciar sesión</a>
       </div>
     </div>
-    <aside class="muralcard">
-      <div class="stripe">
-        <span style="background:var(--terracotta)"></span>
-        <span style="background:var(--ochre)"></span>
-        <span style="background:var(--leaf)"></span>
-        <span style="background:var(--indigo)"></span>
-        <span style="background:var(--bone)"></span>
+    <aside class="wa-mock" aria-label="Vista previa de conversación">
+      <div class="wa-mock-head">
+        <div class="wa-mock-avatar">B</div>
+        <div class="wa-mock-meta">
+          <div class="wa-mock-name">Birrias El Chalán</div>
+          <div class="wa-mock-sub">en línea</div>
+        </div>
+        <div class="wa-langs" role="tablist" aria-label="Idioma">
+          <button type="button" class="wa-lang active" data-lang="en" role="tab" aria-selected="true" title="English">
+            <span class="flagstack">🇬🇧🇺🇸🇨🇦</span>
+          </button>
+          <button type="button" class="wa-lang" data-lang="es" role="tab" aria-selected="false" title="Español">
+            <span class="flagstack">🇲🇽🇨🇴🇪🇸</span>
+          </button>
+        </div>
       </div>
-      <h3>“¿A qué hora abren mañana?”</h3>
-      <p>Tu cliente pregunta por WhatsApp. Chalagente responde al instante con la información de tu negocio — texto, voz, foto o video.</p>
+      <div class="wa-mock-body">
+        <div class="wa-bubble in" data-lang="en">What is a birria taco? What makes yours special?</div>
+        <div class="wa-bubble in" data-lang="es" hidden>¿Qué es un taco de birria? ¿Qué hace especial el de ustedes?</div>
+        <div class="wa-bubble out" data-lang="en">
+          <strong>Slow-cooked goat stew in a tortilla.</strong><br>
+          Ours is marinated 24h in a secret guajillo-ancho rub — try it as a quesabirria with consomé on the side.
+        </div>
+        <div class="wa-bubble out" data-lang="es" hidden>
+          <strong>Estofado de chivo en tortilla.</strong><br>
+          La nuestra se marina 24h con un recado secreto de guajillo y ancho — pruébala en quesabirria con consomé aparte.
+        </div>
+      </div>
+      <div class="wa-mock-foot">simulación · responde en el idioma del cliente</div>
     </aside>
   </div>
 </section>
@@ -368,6 +439,19 @@ section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
     </span>
   </div>
 </footer>
+<script>
+(function(){
+  const btns = document.querySelectorAll('.wa-lang');
+  if (!btns.length) return;
+  btns.forEach(b => b.addEventListener('click', () => {
+    const lang = b.dataset.lang;
+    btns.forEach(x => { x.classList.toggle('active', x === b); x.setAttribute('aria-selected', x === b); });
+    document.querySelectorAll('.wa-bubble[data-lang]').forEach(el => {
+      el.hidden = el.dataset.lang !== lang;
+    });
+  }));
+})();
+</script>
 </body>
 </html>`))
 
