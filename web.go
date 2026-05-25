@@ -50,6 +50,7 @@ func (a *App) Mux() http.Handler {
 	protected.HandleFunc("/app", a.handleDashboard)
 	protected.HandleFunc("/admin", a.handleDashboard)
 	protected.HandleFunc("/app/agent", a.handleDashboardAgentToggle)
+	protected.HandleFunc("POST /app/trigger", a.handleDashboardTriggerToggle)
 	protected.HandleFunc("/app/business", a.handleDashboardBusiness)
 	protected.HandleFunc("/app/events", a.handleDashboardEvents)
 	protected.HandleFunc("/app/qr.png", a.handleDashboardShareQR)
