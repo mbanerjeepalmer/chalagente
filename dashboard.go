@@ -12,12 +12,14 @@ import (
 )
 
 type dashData struct {
-	Business      store.Business
-	WAMeURL       string
-	Connected     bool
-	LoggedIn      bool
-	Conversations []convoRow
-	Flash         string
+	Business             store.Business
+	WAMeURL              string
+	Connected            bool
+	LoggedIn             bool
+	Conversations        []convoRow
+	Flash                string
+	ClerkPublishableKey  string
+	ClerkFrontendAPI     string
 }
 
 type convoRow struct {
@@ -65,6 +67,10 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		LoggedIn:      status.LoggedIn,
 		Conversations: rows,
 		Flash:         r.URL.Query().Get("flash"),
+	}
+	if a.ClerkAuth != nil {
+		data.ClerkPublishableKey = a.ClerkAuth.PublishableKey
+		data.ClerkFrontendAPI = a.ClerkAuth.FrontendAPI
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := dashTmpl.Execute(w, data); err != nil {
@@ -282,7 +288,11 @@ form{display:inline}
    <p style="font-size:.85em"><a href="{{ .WAMeURL }}">{{ .WAMeURL }}</a></p>
   </div>
   <div class="card">
-   <form method="POST" action="/logout"><button>Cerrar sesión</button></form>
+   {{ if .ClerkPublishableKey }}
+    <div id="clerk-user-button" style="display:flex;align-items:center;gap:.5rem"></div>
+   {{ else }}
+    <form method="POST" action="/logout"><button>Cerrar sesión</button></form>
+   {{ end }}
   </div>
  </div>
 </div>
@@ -300,6 +310,25 @@ es.onmessage = (e) => {
  } catch {}
 };
 </script>
+{{ if .ClerkPublishableKey }}
+<script
+  async
+  crossorigin="anonymous"
+  data-clerk-publishable-key="{{ .ClerkPublishableKey }}"
+  src="https://{{ .ClerkFrontendAPI }}/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+  type="text/javascript"
+  onload="bootClerkButton()"
+></script>
+<script>
+async function bootClerkButton() {
+  await window.Clerk.load();
+  const mount = document.getElementById('clerk-user-button');
+  if (!mount) return;
+  if (!window.Clerk.user) { window.location.href = '/sign-in'; return; }
+  window.Clerk.mountUserButton(mount, { afterSignOutUrl: '/' });
+}
+</script>
+{{ end }}
 </body></html>`))
 
 var dashBusinessTmpl = template.Must(template.New("dashBusiness").Parse(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Información — Chalagente</title>
