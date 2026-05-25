@@ -330,7 +330,7 @@ section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
     <div class="steps">
       <div class="step"><span class="num">1</span><h3>Cuéntale de tu negocio</h3><p>Escribe — o dicta con tu voz — quién eres, qué vendes y cómo atiendes.</p></div>
       <div class="step"><span class="num">2</span><h3>Conecta tu WhatsApp</h3><p>Escanea el código QR desde la app, como un dispositivo más.</p></div>
-      <div class="step"><span class="num">3</span><h3>Chalagente responde</h3><p>Cuando un cliente te escribe, Chalagente contesta con tu información.</p></div>
+      <div class="step"><span class="num">3</span><h3>Chalagente responde</h3><p>Cuando un cliente menciona «Chalagente» en su mensaje, el agente contesta con tu información. Una vez mencionado en la conversación, sigue respondiendo a los siguientes mensajes.</p></div>
     </div>
   </div>
 </section>

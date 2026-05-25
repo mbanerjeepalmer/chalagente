@@ -306,6 +306,64 @@ func TestUnpairWhatsAppClearsDeviceJID(t *testing.T) {
 	}
 }
 
+func TestTriggerKeywordExplained(t *testing.T) {
+	a, mail := newTestApp(t)
+	srv := httptest.NewServer(a.Mux())
+	defer srv.Close()
+	a.Auth.BaseURL = srv.URL
+
+	// Landing page — public, no auth.
+	{
+		res, err := http.Get(srv.URL + "/")
+		if err != nil {
+			t.Fatalf("GET /: %v", err)
+		}
+		body, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if !strings.Contains(string(body), "«Chalagente»") {
+			t.Fatalf("landing missing trigger explanation; body: %s", first(string(body), 400))
+		}
+	}
+
+	// Set up an authed session with a paired business so we can hit /app
+	// and /onboarding/test.
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	if _, err := client.PostForm(srv.URL+"/signup", url.Values{"email": []string{"trig@x.com"}}); err != nil {
+		t.Fatalf("signup: %v", err)
+	}
+	if res, err := client.Get(mail.lastURL()); err != nil {
+		t.Fatalf("verify: %v", err)
+	} else {
+		res.Body.Close()
+	}
+	u, err := a.Store.GetUserByEmail(context.Background(), "trig@x.com")
+	if err != nil {
+		t.Fatalf("GetUserByEmail: %v", err)
+	}
+	biz, err := a.Store.GetBusinessByUserID(context.Background(), u.ID)
+	if err != nil {
+		t.Fatalf("GetBusinessByUserID: %v", err)
+	}
+	biz.Name = "Café Trigger"
+	biz.WADeviceJID = "5215512345678:1@s.whatsapp.net"
+	if err := a.Store.UpdateBusiness(context.Background(), biz); err != nil {
+		t.Fatalf("UpdateBusiness: %v", err)
+	}
+
+	for _, path := range []string{"/app", "/onboarding/test"} {
+		res, err := client.Get(srv.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		body, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if !strings.Contains(string(body), "«Chalagente»") {
+			t.Fatalf("%s missing trigger explanation; body: %s", path, first(string(body), 400))
+		}
+	}
+}
+
 func first(s string, n int) string {
 	if len(s) <= n {
 		return s

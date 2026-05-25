@@ -449,6 +449,7 @@ async function poll() {
 var onbTestTmpl = template.Must(template.New("onbTest").Parse(onbCommonCSS + `
 <h1>¡Casi listo! — Prueba el agente</h1>
 <p>Tu número está conectado. Mándale un mensaje desde otro teléfono y mira al agente responder en vivo.</p>
+<p><strong>Importante:</strong> el agente solo responde cuando tu mensaje incluye la palabra «Chalagente». Una vez mencionado, sigue respondiendo a los siguientes mensajes de esa conversación.</p>
 <p><strong>Tu link wa.me:</strong> <a href="{{ .WAMeURL }}">{{ .WAMeURL }}</a></p>
 <h2>Transcripción en vivo</h2>
 <ul id="feed" style="font-family:monospace;font-size:.85em;max-height:18rem;overflow:auto;border:1px solid #ddd;padding:.5rem"></ul>

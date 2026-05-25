@@ -276,7 +276,8 @@ form{display:inline}
      <input type="hidden" name="enabled" value="1"><button class="primary">Encender</button>
     {{ end }}
    </form>
-   <br><br>
+   <p style="font-size:.85em;color:#555;margin:.4rem 0 0;clear:both">Responde cuando alguien menciona «Chalagente» en el chat. Una vez mencionado, sigue respondiendo en esa conversación.</p>
+   <br>
    <strong>WhatsApp:</strong>
    {{ if .LoggedIn }}<span class="status ok">vinculado</span>{{ else }}<span class="status bad">desvinculado</span>{{ end }}
    {{ if .Connected }}<span class="status ok">conectado</span>{{ else }}<span class="status bad">desconectado</span>{{ end }}
