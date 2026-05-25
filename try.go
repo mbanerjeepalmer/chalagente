@@ -398,7 +398,7 @@ audio{width:100%;margin-top:.25rem;height:32px}
   <form id="bizform" onsubmit="return saveBiz(event)">
    <label>Nombre</label><input name="name" value="{{ .Business.Name }}">
    <label>Horario</label><input name="hours" value="{{ .Business.Hours }}">
-   <label>Dirección</label><input name="address" value="{{ .Business.Address }}">
+   <label>Dirección</label><textarea name="address" rows="2">{{ .Business.Address }}</textarea>
    <label>Información extra (menú, precios, formas de pago, políticas, idiomas...)</label>
    <textarea name="extra_info" rows="9">{{ .Business.ExtraInfo }}</textarea>
    <p class="hint">Cuéntale lo que un cliente nuevo querría saber: qué vendes, cuánto cuesta, cómo se paga, en qué idiomas hablas.</p>
