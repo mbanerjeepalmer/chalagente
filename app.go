@@ -114,6 +114,15 @@ func (a *App) publish(e Event) {
 	}
 }
 
+// clearRecent drops the in-memory recent-event buffer for businessID. Used
+// after the persisted chat history is deleted so the live feed in the
+// dashboard reflects the same empty state.
+func (a *App) clearRecent(businessID string) {
+	a.busMu.Lock()
+	defer a.busMu.Unlock()
+	delete(a.recent, businessID)
+}
+
 func (a *App) subscribe(businessID string) (chan Event, []Event, func()) {
 	ch := make(chan Event, 16)
 	a.busMu.Lock()
