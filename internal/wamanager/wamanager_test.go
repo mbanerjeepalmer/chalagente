@@ -88,6 +88,13 @@ func TestDispatchNoHandler(t *testing.T) {
 	m.dispatch("biz1")("hello") // should not panic
 }
 
+func TestLogoutUnregistered(t *testing.T) {
+	m := New(nil, nil)
+	if err := m.Logout(t.Context(), "missing"); err != ErrNotRegistered {
+		t.Fatalf("Logout missing: got %v, want ErrNotRegistered", err)
+	}
+}
+
 func TestTenantsSnapshot(t *testing.T) {
 	m := New(nil, nil)
 	if got := m.Tenants(); len(got) != 0 {

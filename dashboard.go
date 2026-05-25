@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"html/template"
 	"log"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mbanerjeepalmer/chalagente/internal/store"
+	"github.com/mbanerjeepalmer/chalagente/internal/wamanager"
 	"rsc.io/qr"
 )
 
@@ -145,6 +147,26 @@ func (a *App) handleDashboardBusiness(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleDashboardUnpair drops the WhatsApp link: it tells WhatsApp servers to
+// remove the linked device (best-effort — a missing live client is fine), then
+// clears the persisted device JID so the tenant won't be auto-reconnected on
+// next boot. The user will need to scan a fresh QR to pair again.
+func (a *App) handleDashboardUnpair(w http.ResponseWriter, r *http.Request) {
+	b, ok := a.requireBusiness(w, r)
+	if !ok {
+		return
+	}
+	if err := a.WAMgr.Logout(r.Context(), b.ID); err != nil && !errors.Is(err, wamanager.ErrNotRegistered) {
+		log.Printf("unpair: logout %s: %v", b.ID, err)
+	}
+	b.WADeviceJID = ""
+	if err := a.Store.UpdateBusiness(r.Context(), b); err != nil {
+		http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/app?flash=WhatsApp+desvinculado", http.StatusSeeOther)
+}
+
 func (a *App) handleDashboardEvents(w http.ResponseWriter, r *http.Request) {
 	b, ok := a.requireBusiness(w, r)
 	if !ok {
@@ -259,6 +281,12 @@ form{display:inline}
    {{ if .LoggedIn }}<span class="status ok">vinculado</span>{{ else }}<span class="status bad">desvinculado</span>{{ end }}
    {{ if .Connected }}<span class="status ok">conectado</span>{{ else }}<span class="status bad">desconectado</span>{{ end }}
    <div style="font-family:monospace;font-size:.85em;color:#555">{{ .Business.WADeviceJID }}</div>
+   {{ if .Business.WADeviceJID }}
+   <form method="POST" action="/app/whatsapp/unpair" style="margin-top:.5rem"
+         onsubmit="return confirm('¿Desvincular WhatsApp? Tendrás que escanear el QR otra vez.');">
+    <button>Desvincular WhatsApp</button>
+   </form>
+   {{ end }}
   </div>
   <div class="card">
    <h2 style="margin-top:0">Conversaciones recientes</h2>
