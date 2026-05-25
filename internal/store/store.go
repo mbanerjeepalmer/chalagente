@@ -123,6 +123,11 @@ type Business struct {
 	ExtraInfo    string
 	WADeviceJID  string
 	AgentEnabled bool
+	// TriggerRequired gates the agent on the word "chalagente". When true,
+	// the agent only replies in conversations where the keyword has been
+	// mentioned. When false, the agent responds to every incoming message
+	// (subject to AgentEnabled).
+	TriggerRequired bool
 	VoiceMode    string // "auto" | "always" | "never"
 	VoiceID      string
 	CreatedAt    time.Time
@@ -424,19 +429,20 @@ func (s *Store) ConsumeMagicLink(ctx context.Context, token string) (string, err
 func (s *Store) CreateBusiness(ctx context.Context, userID string) (Business, error) {
 	now := time.Now().UTC()
 	b := Business{
-		ID:           uuid.NewString(),
-		UserID:       userID,
-		AgentEnabled: true,
-		VoiceMode:    "auto",
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:              uuid.NewString(),
+		UserID:          userID,
+		AgentEnabled:    true,
+		TriggerRequired: true,
+		VoiceMode:       "auto",
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO businesses(
 			id, user_id, name, maps_place_id, address, phone, hours, categories,
-			website, extra_info, wa_device_jid, agent_enabled, voice_mode, voice_id,
-			created_at, updated_at
-		) VALUES(?, ?, '', NULL, '', '', '', '', '', '', NULL, 1, 'auto', NULL, ?, ?)`,
+			website, extra_info, wa_device_jid, agent_enabled, trigger_required,
+			voice_mode, voice_id, created_at, updated_at
+		) VALUES(?, ?, '', NULL, '', '', '', '', '', '', NULL, 1, 1, 'auto', NULL, ?, ?)`,
 		b.ID, b.UserID,
 		b.CreatedAt.Format(time.RFC3339Nano),
 		b.UpdatedAt.Format(time.RFC3339Nano),
@@ -448,8 +454,8 @@ func (s *Store) CreateBusiness(ctx context.Context, userID string) (Business, er
 }
 
 const businessCols = `id, user_id, name, maps_place_id, address, phone, hours,
-	categories, website, extra_info, wa_device_jid, agent_enabled, voice_mode,
-	voice_id, created_at, updated_at`
+	categories, website, extra_info, wa_device_jid, agent_enabled,
+	trigger_required, voice_mode, voice_id, created_at, updated_at`
 
 func scanBusiness(row *sql.Row) (Business, error) {
 	var b Business
@@ -458,13 +464,14 @@ func scanBusiness(row *sql.Row) (Business, error) {
 		waDeviceJID sql.NullString
 		voiceID     sql.NullString
 		agentInt    int
+		triggerInt  int
 		createdAt   string
 		updatedAt   string
 	)
 	err := row.Scan(
 		&b.ID, &b.UserID, &b.Name, &mapsPlaceID, &b.Address, &b.Phone,
 		&b.Hours, &b.Categories, &b.Website, &b.ExtraInfo, &waDeviceJID,
-		&agentInt, &b.VoiceMode, &voiceID, &createdAt, &updatedAt,
+		&agentInt, &triggerInt, &b.VoiceMode, &voiceID, &createdAt, &updatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Business{}, ErrNotFound
@@ -476,6 +483,7 @@ func scanBusiness(row *sql.Row) (Business, error) {
 	b.WADeviceJID = waDeviceJID.String
 	b.VoiceID = voiceID.String
 	b.AgentEnabled = agentInt != 0
+	b.TriggerRequired = triggerInt != 0
 	b.CreatedAt = parseTime(createdAt)
 	b.UpdatedAt = parseTime(updatedAt)
 	return b, nil
@@ -512,18 +520,22 @@ func (s *Store) UpdateBusiness(ctx context.Context, b Business) error {
 	if b.AgentEnabled {
 		agentInt = 1
 	}
+	triggerInt := 0
+	if b.TriggerRequired {
+		triggerInt = 1
+	}
 	updated := time.Now().UTC()
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE businesses SET
 			name = ?, maps_place_id = ?, address = ?, phone = ?, hours = ?,
 			categories = ?, website = ?, extra_info = ?, wa_device_jid = ?,
-			agent_enabled = ?, voice_mode = ?, voice_id = ?, updated_at = ?
+			agent_enabled = ?, trigger_required = ?, voice_mode = ?, voice_id = ?, updated_at = ?
 		WHERE id = ?`,
 		b.Name,
 		nullableString(b.MapsPlaceID),
 		b.Address, b.Phone, b.Hours, b.Categories, b.Website, b.ExtraInfo,
 		nullableString(b.WADeviceJID),
-		agentInt, b.VoiceMode,
+		agentInt, triggerInt, b.VoiceMode,
 		nullableString(b.VoiceID),
 		updated.Format(time.RFC3339Nano),
 		b.ID,

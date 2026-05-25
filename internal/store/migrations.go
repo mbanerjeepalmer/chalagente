@@ -113,6 +113,12 @@ ALTER TABLE users ADD COLUMN clerk_user_id TEXT;
 CREATE UNIQUE INDEX idx_users_clerk_user_id ON users(clerk_user_id) WHERE clerk_user_id IS NOT NULL;
 `,
 	},
+	{
+		name: "0003_trigger_required",
+		sql: `
+ALTER TABLE businesses ADD COLUMN trigger_required INTEGER NOT NULL DEFAULT 1;
+`,
+	},
 }
 
 // runMigrations applies any pending migrations, in order. It creates the

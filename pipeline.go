@@ -87,7 +87,7 @@ func (a *App) processIncoming(businessID string, msg *events.Message) {
 		log.Printf("pipeline: list history: %v", err)
 	}
 
-	if !chatHasTrigger(history, body) {
+	if biz.TriggerRequired && !chatHasTrigger(history, body) {
 		return
 	}
 

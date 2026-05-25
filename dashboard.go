@@ -115,6 +115,27 @@ func (a *App) handleDashboardAgentToggle(w http.ResponseWriter, r *http.Request)
 	http.Redirect(w, r, "/app?flash=Agente+"+state, http.StatusSeeOther)
 }
 
+func (a *App) handleDashboardTriggerToggle(w http.ResponseWriter, r *http.Request) {
+	b, ok := a.requireBusiness(w, r)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	b.TriggerRequired = r.PostForm.Get("required") == "1"
+	if err := a.Store.UpdateBusiness(r.Context(), b); err != nil {
+		http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	state := "obligatoria"
+	if !b.TriggerRequired {
+		state = "opcional"
+	}
+	http.Redirect(w, r, "/app?flash=Palabra+clave+"+state, http.StatusSeeOther)
+}
+
 func (a *App) handleDashboardBusiness(w http.ResponseWriter, r *http.Request) {
 	b, ok := a.requireBusiness(w, r)
 	if !ok {
@@ -276,7 +297,20 @@ form{display:inline}
      <input type="hidden" name="enabled" value="1"><button class="primary">Encender</button>
     {{ end }}
    </form>
-   <p style="font-size:.85em;color:#555;margin:.4rem 0 0;clear:both">Responde cuando alguien menciona «Chalagente» en el chat. Una vez mencionado, sigue respondiendo en esa conversación.</p>
+   <p style="font-size:.85em;color:#555;margin:.4rem 0 0;clear:both">
+    {{ if .Business.TriggerRequired }}
+     Responde cuando alguien menciona «Chalagente» en el chat. Una vez mencionado, sigue respondiendo en esa conversación.
+    {{ else }}
+     Responde a <strong>todos</strong> los mensajes entrantes — no se necesita palabra clave.
+    {{ end }}
+   </p>
+   <form method="POST" action="/app/trigger" style="margin-top:.4rem">
+    {{ if .Business.TriggerRequired }}
+     <input type="hidden" name="required" value="0"><button type="submit">Quitar palabra clave</button>
+    {{ else }}
+     <input type="hidden" name="required" value="1"><button type="submit">Exigir «Chalagente»</button>
+    {{ end }}
+   </form>
    <br>
    <strong>WhatsApp:</strong>
    {{ if .LoggedIn }}<span class="status ok">vinculado</span>{{ else }}<span class="status bad">desvinculado</span>{{ end }}
