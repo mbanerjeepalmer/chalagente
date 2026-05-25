@@ -87,11 +87,14 @@ func (s *tryStore) getOrCreate(id string) *trySession {
 
 func defaultTryBusiness() tryBusiness {
 	return tryBusiness{
-		Name:    "Café Demo",
-		Hours:   "Lun-Vie 9:00-20:00 · Sáb-Dom 10:00-22:00",
-		Address: "Av. Reforma 123, Ciudad de México",
-		ExtraInfo: "Aceptamos efectivo, tarjeta y transferencia. Tenemos opciones vegetarianas y sin gluten. " +
-			"Hacemos pedidos para llevar. Para reservas de más de 6 personas escríbenos con un día de anticipación.",
+		Name:    "Birrias El Chalán",
+		Hours:   "Mar-Dom 8:00-15:00 · Lunes cerrado",
+		Address: "Esquina de Calle Donato Guerra y 5 de Mayo, Guadalajara, Jalisco",
+		ExtraInfo: "Puesto callejero de birria de chivo, estilo tapatío. La birria se marina 24h con chiles guajillo, ancho, ajo, comino y nuestro recado secreto. " +
+			"Servimos en tacos dorados, quesabirria, consomé y por kilo para llevar. Salsa de molcajete picosa. " +
+			"Acompañamos con tortillas hechas a mano, cebollita, cilantro y limón. " +
+			"Precio: taco $25, quesabirria $40, consomé $50, kilo $380. Solo efectivo. " +
+			"Hablamos español; con turistas podemos contestar en inglés o francés.",
 	}
 }
 
@@ -310,88 +313,115 @@ func (a *App) handleTryReset(w http.ResponseWriter, r *http.Request) {
 
 // ---- Template ----
 
-var tryTmpl = template.Must(template.New("try").Parse(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+var tryTmpl = template.Must(template.New("try").Parse(`<!doctype html><html lang="es-MX"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Probar Chalagente — chatea con un agente sin registrarte</title>
+<title>Demo · Chalagente — chatea con un agente sin registrarte</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root { --bg:#0b0f14; --panel:#141b24; --border:rgba(255,255,255,0.08); --text:#e7edf3; --muted:#8a96a6; --accent:#25d366; }
+:root {
+  --wall:#f1ead9; --wall-shade:#e6dec7; --plaster:#ece2cb; --bone:#faf6ea;
+  --ink:#1c1a16; --ink-soft:#3a352c; --muted:#6b6354; --line:rgba(28,26,22,0.14);
+  --terracotta:#b5482e; --terracotta-deep:#8a3320; --ochre:#c8932b; --indigo:#25406e; --leaf:#4f6a3a;
+}
 *{box-sizing:border-box}
-html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;line-height:1.5}
-.topbar{display:flex;justify-content:space-between;align-items:center;padding:.8rem 1.5rem;border-bottom:1px solid var(--border);background:rgba(11,15,20,.85);backdrop-filter:blur(8px);position:sticky;top:0;z-index:5}
-.topbar .logo{display:flex;align-items:center;gap:.5rem;font-weight:700}
-.topbar .logo-mark{width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,#25d366,#128c7e);display:grid;place-items:center;color:#04130b;font-weight:800;font-size:.8rem}
-.topbar a{color:inherit;text-decoration:none}
-.btn{display:inline-flex;align-items:center;gap:.4rem;padding:.5rem .9rem;border-radius:999px;font-weight:600;font-size:.9rem;background:var(--accent);color:#04130b;text-decoration:none}
-.banner{background:linear-gradient(90deg,rgba(37,211,102,.15),rgba(18,140,126,.05));padding:.8rem 1.5rem;border-bottom:1px solid var(--border);font-size:.9rem;color:#cde}
-.banner strong{color:#7be4a8}
-.layout{display:grid;grid-template-columns:340px 1fr;gap:0;height:calc(100vh - 98px);min-height:600px}
-@media(max-width:820px){.layout{grid-template-columns:1fr;height:auto}.sidebar{border-right:0;border-bottom:1px solid var(--border)}}
-.sidebar{padding:1.5rem;background:var(--panel);border-right:1px solid var(--border);overflow-y:auto}
-.sidebar h2{margin:0 0 .25rem;font-size:1rem}
-.sidebar p.muted{color:var(--muted);font-size:.85em;margin:0 0 1rem}
-.sidebar label{display:block;font-size:.78em;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:.9rem 0 .25rem}
-.sidebar input,.sidebar textarea{width:100%;padding:.55rem .65rem;background:#0e1620;color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:.92rem;font-family:inherit}
-.sidebar textarea{resize:vertical}
-.sidebar .savebtn{margin-top:1rem;padding:.55rem 1rem;background:var(--accent);color:#04130b;border:none;border-radius:6px;font-weight:600;font-size:.9rem;cursor:pointer;width:100%}
-.sidebar .savebtn.saved{background:#1f6f4a;color:#e8ffea}
-.chatpane{display:flex;flex-direction:column;background:#0e1620;min-height:0}
+html,body{margin:0;padding:0;background:var(--wall);color:var(--ink-soft);font-family:"Inter","Helvetica Neue",sans-serif;line-height:1.55;
+  background-image: radial-gradient(rgba(110,90,60,0.05) 1px, transparent 1px), linear-gradient(180deg,var(--wall),var(--wall-shade));
+  background-size: 3px 3px, 100% 100%;}
+h1,h2,h3{font-family:"Cormorant Garamond",Georgia,serif;color:var(--ink);font-weight:600;letter-spacing:-0.005em}
+a{color:var(--terracotta-deep)}
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:.9rem 1.6rem;border-bottom:1px solid var(--line);background:rgba(241,234,217,0.95);backdrop-filter:blur(6px);position:sticky;top:0;z-index:50}
+.topbar .logo{display:flex;align-items:center;gap:.55rem;font-family:"Cormorant Garamond",serif;font-weight:700;font-size:1.3rem;color:var(--ink);text-decoration:none}
+.topbar .logo-mark{width:28px;height:28px;border-radius:50%;background:var(--terracotta);display:grid;place-items:center;color:var(--bone);font-family:"Cormorant Garamond",serif;font-weight:700;font-size:.95rem;box-shadow:inset 0 -2px 0 rgba(0,0,0,0.15)}
+.topbar a{text-decoration:none;color:var(--ink-soft)}
+.btn{display:inline-flex;align-items:center;gap:.4rem;padding:.55rem 1rem;border-radius:6px;font-weight:600;font-size:.92rem;background:var(--terracotta);color:var(--bone);text-decoration:none;border:none;cursor:pointer;box-shadow:0 2px 0 var(--terracotta-deep)}
+.btn-ghost{background:transparent;color:var(--ink);border:1px solid var(--ink);box-shadow:none}
+.banner{background:rgba(200,147,43,0.12);border-bottom:1px solid var(--line);padding:.7rem 1.6rem;font-size:.9rem;color:var(--ink-soft)}
+.banner strong{color:var(--terracotta-deep);font-weight:600}
+.layout{display:grid;grid-template-columns:380px 1fr;gap:1.5rem;padding:1.5rem;max-width:1280px;margin:0 auto;align-items:start}
+@media(max-width:880px){.layout{grid-template-columns:1fr;padding:1rem}}
+.sidebar{padding:1.5rem;background:var(--bone);border:1px solid var(--line);border-radius:6px;position:relative;transition:box-shadow .25s ease, transform .25s ease}
+.sidebar.ringed{box-shadow:0 0 0 4px rgba(181,72,46,0.18), 0 0 0 6px rgba(181,72,46,0.35); animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 4px rgba(181,72,46,0.18), 0 0 0 6px rgba(181,72,46,0.35)} 50%{box-shadow:0 0 0 8px rgba(181,72,46,0.10), 0 0 0 10px rgba(181,72,46,0.20)}}
+.sidebar h2{margin:0 0 .25rem;font-size:1.5rem}
+.sidebar p.muted{color:var(--muted);font-size:.88em;margin:0 0 1rem}
+.sidebar label{display:block;font-size:.74em;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:.9rem 0 .3rem;font-weight:600}
+.sidebar input,.sidebar textarea{width:100%;padding:.55rem .7rem;background:var(--wall);color:var(--ink);border:1px solid var(--line);border-radius:4px;font-size:.93rem;font-family:inherit}
+.sidebar input:focus,.sidebar textarea:focus{outline:none;border-color:var(--terracotta);background:var(--bone)}
+.sidebar textarea{resize:vertical;min-height:8rem}
+.sidebar .hint{color:var(--muted);font-size:.78em;margin:.25rem 0 0;font-style:italic}
+.sidebar .savebtn{margin-top:1rem;padding:.6rem 1rem;background:var(--terracotta);color:var(--bone);border:none;border-radius:4px;font-weight:600;font-size:.92rem;cursor:pointer;width:100%;box-shadow:0 2px 0 var(--terracotta-deep)}
+.sidebar .savebtn.saved{background:var(--leaf);box-shadow:0 2px 0 #2f4422}
+.actions{display:flex;gap:.5rem;margin-top:.8rem}
+.actions button{flex:1;padding:.45rem;background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:4px;font-size:.8em;cursor:pointer;font-family:inherit}
+.actions button:hover{color:var(--ink);border-color:var(--ink)}
+.tooltip{position:absolute;top:-14px;right:-14px;background:var(--ink);color:var(--bone);padding:.55rem .85rem;border-radius:6px;font-size:.82rem;font-weight:500;box-shadow:0 6px 16px rgba(0,0,0,0.2);opacity:0;transform:translateY(-6px) scale(.95);transition:opacity .35s ease, transform .35s ease;pointer-events:none;max-width:260px;line-height:1.35;z-index:5}
+.tooltip.visible{opacity:1;transform:translateY(0) scale(1)}
+.tooltip::after{content:"";position:absolute;bottom:-6px;right:36px;width:12px;height:12px;background:var(--ink);transform:rotate(45deg)}
+
+/* The WhatsApp chat panel: keep clone styling. */
+.chatpane{display:flex;flex-direction:column;background:#0e1620;border-radius:6px;overflow:hidden;border:1px solid var(--line);box-shadow:0 8px 24px rgba(40,30,15,0.10);min-height:560px}
 .phead{display:flex;align-items:center;gap:.6rem;padding:.8rem 1.2rem;background:#075e54;color:white;border-bottom:1px solid #04443c}
 .phead .avatar{width:36px;height:36px;border-radius:50%;background:#25d366;display:grid;place-items:center;font-weight:700;color:#04130b}
 .phead .name{font-weight:600}.phead .sub{font-size:.75em;opacity:.85}
-.chat{flex:1;overflow-y:auto;padding:1rem 1.2rem;background:#ece5dd;display:flex;flex-direction:column;gap:.4rem}
-.bubble{max-width:75%;padding:.55rem .75rem;border-radius:12px;font-size:.95rem;color:#222;box-shadow:0 1px 1px rgba(0,0,0,.08);word-wrap:break-word}
+.chat{flex:1;overflow-y:auto;padding:1rem 1.2rem;background:#ece5dd;display:flex;flex-direction:column;gap:.4rem;min-height:380px}
+.bubble{max-width:75%;padding:.55rem .75rem;border-radius:12px;font-size:.95rem;color:#222;box-shadow:0 1px 1px rgba(0,0,0,.08);word-wrap:break-word;font-family:"Inter",sans-serif}
 .bubble.in{background:#dcf8c6;align-self:flex-end;border-bottom-right-radius:2px}
 .bubble.out{background:white;align-self:flex-start;border-bottom-left-radius:2px}
 .bubble small{display:block;color:#888;font-size:.7em;margin-top:.2rem}
 audio{width:100%;margin-top:.25rem;height:32px}
 .composer{display:flex;gap:.5rem;padding:.6rem .8rem;background:#f0f0f0;border-top:1px solid #ccc}
-.composer input[type=text]{flex:1;padding:.55rem .9rem;border:none;border-radius:18px;font-size:.95rem}
+.composer input[type=text]{flex:1;padding:.55rem .9rem;border:none;border-radius:18px;font-size:.95rem;font-family:"Inter",sans-serif}
 .composer button{border:none;border-radius:50%;width:42px;height:42px;background:#25d366;color:white;font-size:1.2rem;cursor:pointer}
 .composer .audiobtn{background:#075e54}
 .composer input[type=file]{display:none}
-.cta-footer{padding:.7rem 1.2rem;background:#0e1620;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:.85em;color:var(--muted)}
-.cta-footer a{color:#7be4a8;font-weight:600;text-decoration:none}
-.actions{display:flex;gap:.5rem;margin-top:.8rem}
-.actions button{flex:1;padding:.4rem;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:6px;font-size:.8em;cursor:pointer}
+.cta-footer{padding:.7rem 1.2rem;background:#0e1620;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;font-size:.85em;color:#8a96a6}
+.cta-footer.highlight{background:linear-gradient(90deg,rgba(181,72,46,.18),rgba(200,147,43,.08));color:var(--bone)}
+.cta-footer a{color:#dcf8c6;font-weight:600;text-decoration:none}
+.cta-footer.highlight a{color:var(--bone);background:var(--terracotta);padding:.35rem .8rem;border-radius:4px;box-shadow:0 2px 0 var(--terracotta-deep)}
 </style>
 </head><body>
 <div class="topbar">
- <a class="logo" href="/"><div class="logo-mark">C</div><span>Chalagente</span></a>
- <a class="btn" href="/signup">Crear cuenta →</a>
+ <a class="logo" href="/"><span class="logo-mark">C</span><span>Chalagente</span></a>
+ <div style="display:flex;gap:.6rem;align-items:center">
+  <a href="/signup" style="font-size:.92rem">Iniciar sesión</a>
+  <a class="btn" href="/signup">Crear cuenta →</a>
+ </div>
 </div>
 <div class="banner">
  <strong>Modo demo</strong> · Edita los datos del negocio a la izquierda y mira cómo el agente los usa. Nada se guarda al cerrar la pestaña.
 </div>
 <div class="layout">
- <div class="sidebar">
+ <div class="sidebar" id="sidebar">
+  <div class="tooltip" id="bizTooltip">¡Bien! Ahora cuéntale de <em>tu</em> negocio aquí — luego mándale más mensajes.</div>
   <h2>Mi negocio</h2>
   <p class="muted">Estos son los datos que el agente usa para responder. Cámbialos y prueba otra vez.</p>
   <form id="bizform" onsubmit="return saveBiz(event)">
    <label>Nombre</label><input name="name" value="{{ .Business.Name }}">
-   <label>Horarios</label><input name="hours" value="{{ .Business.Hours }}">
+   <label>Horario</label><input name="hours" value="{{ .Business.Hours }}">
    <label>Dirección</label><input name="address" value="{{ .Business.Address }}">
-   <label>Información extra (FAQ, precios, políticas)</label>
-   <textarea name="extra_info" rows="8">{{ .Business.ExtraInfo }}</textarea>
+   <label>Información extra (menú, precios, formas de pago, políticas, idiomas...)</label>
+   <textarea name="extra_info" rows="9">{{ .Business.ExtraInfo }}</textarea>
+   <p class="hint">Cuéntale lo que un cliente nuevo querría saber: qué vendes, cuánto cuesta, cómo se paga, en qué idiomas hablas.</p>
    <button class="savebtn" id="savebtn">Guardar datos</button>
   </form>
   <div class="actions">
-   <button onclick="resetChat()">Borrar chat</button>
-   <button onclick="resetBiz()">Restaurar defaults</button>
+   <button type="button" onclick="resetChat()">Borrar chat</button>
+   <button type="button" onclick="resetBiz()">Restaurar ejemplo</button>
   </div>
  </div>
  <div class="chatpane">
   <div class="phead">
-   <div class="avatar" id="avatar">C</div>
-   <div><div class="name" id="bizName">{{ .Business.Name }}</div><div class="sub">simulador — sin WhatsApp real</div></div>
+   <div class="avatar" id="avatar">B</div>
+   <div><div class="name" id="bizName">{{ .Business.Name }}</div><div class="sub">simulador WhatsApp — sin número real</div></div>
   </div>
   <div class="chat" id="chat"></div>
   <form class="composer" onsubmit="return sendText(event)">
    <input type="file" id="audio" accept="audio/*" onchange="sendAudio()">
-   <button type="button" class="audiobtn" onclick="document.getElementById('audio').click()" title="Enviar nota de voz">🎙</button>
-   <input type="text" id="text" placeholder="Escribe como si fueras un cliente: «¿a qué hora abren?»" autocomplete="off">
+   <button type="button" class="audiobtn" onclick="document.getElementById('audio').click()" title="Subir nota de voz">🎙</button>
+   <input type="text" id="text" value="Bonjour, qu'est-ce que la birria ?" placeholder="Escribe como si fueras un cliente" autocomplete="off">
    <button type="submit" title="Enviar">➤</button>
   </form>
-  <div class="cta-footer">
+  <div class="cta-footer" id="ctaFoot">
    <span>¿Te gusta cómo responde?</span>
    <a href="/signup">Conecta tu WhatsApp →</a>
   </div>
@@ -402,6 +432,14 @@ const chat = document.getElementById('chat');
 const textInput = document.getElementById('text');
 const bizName = document.getElementById('bizName');
 const avatar = document.getElementById('avatar');
+const sidebar = document.getElementById('sidebar');
+const tooltip = document.getElementById('bizTooltip');
+const ctaFoot = document.getElementById('ctaFoot');
+
+let sentCount = 0;
+let bizEdited = false;
+
+function avatarLetter(name){return (name||'B').trim().slice(0,1).toUpperCase()}
 
 function bubble(dir, body, audioB64, audioMime, kind) {
  const div = document.createElement('div');
@@ -417,13 +455,25 @@ function bubble(dir, body, audioB64, audioMime, kind) {
  chat.scrollTop = chat.scrollHeight;
 }
 
+function highlightBusiness() {
+ if (bizEdited) return;
+ sidebar.classList.add('ringed');
+ setTimeout(()=>tooltip.classList.add('visible'), 250);
+}
+function clearHighlight(){
+ sidebar.classList.remove('ringed');
+ tooltip.classList.remove('visible');
+}
+function highlightSignup(){ ctaFoot.classList.add('highlight'); }
+
 async function loadHistory() {
  const r = await fetch('/demo/history');
  const d = await r.json();
  chat.innerHTML = '';
  for (const m of d.messages) bubble(m.dir, m.body, null, null, m.kind);
- if (!d.messages || d.messages.length === 0) {
-  bubble('out', '¡Hola! Soy el agente de ' + bizName.textContent + '. ¿En qué te puedo ayudar?');
+ sentCount = (d.messages||[]).filter(m=>m.dir==='in').length;
+ if (sentCount === 0) {
+  bubble('out', '¡Hola! Soy el agente de ' + bizName.textContent + '. Escríbeme como si fueras un cliente. Mándale al botón ➤ para probar la pregunta prellenada.');
  }
 }
 
@@ -438,6 +488,7 @@ async function sendText(ev) {
  if (!r.ok) { bubble('out', '[error '+r.status+']'); return false; }
  const d = await r.json();
  bubble('out', d.reply, d.audio_b64, d.audio_mime);
+ onAfterSend();
  return false;
 }
 
@@ -452,20 +503,29 @@ async function sendAudio() {
  if (d.transcript) bubble('out', '(transcripción: ' + d.transcript + ')');
  bubble('out', d.reply, d.audio_b64, d.audio_mime);
  document.getElementById('audio').value = '';
+ onAfterSend();
+}
+
+function onAfterSend(){
+ sentCount++;
+ if (sentCount === 1 && !bizEdited) highlightBusiness();
+ if (sentCount >= 2 && bizEdited) highlightSignup();
 }
 
 async function saveBiz(ev) {
  ev.preventDefault();
+ bizEdited = true;
+ clearHighlight();
  const fd = new FormData(document.getElementById('bizform'));
  const r = await fetch('/demo/business', {method:'POST', body: fd});
  if (r.ok) {
   const d = await r.json();
   bizName.textContent = d.name;
-  avatar.textContent = (d.name || 'C').slice(0,1).toUpperCase();
+  avatar.textContent = avatarLetter(d.name);
   const btn = document.getElementById('savebtn');
-  btn.textContent = '✓ Guardado';
+  btn.textContent = '✓ Guardado · ahora prueba otro mensaje';
   btn.classList.add('saved');
-  setTimeout(() => { btn.textContent = 'Guardar datos'; btn.classList.remove('saved'); }, 1500);
+  setTimeout(() => { btn.textContent = 'Guardar datos'; btn.classList.remove('saved'); }, 2500);
  }
  return false;
 }
@@ -473,14 +533,19 @@ async function saveBiz(ev) {
 async function resetChat() {
  await fetch('/demo/reset', {method:'POST'});
  chat.innerHTML = '';
+ sentCount = 0;
  loadHistory();
 }
 
 async function resetBiz() {
- const defaults = {name:'Café Demo', hours:'Lun-Vie 9:00-20:00 · Sáb-Dom 10:00-22:00', address:'Av. Reforma 123, Ciudad de México', extra_info:'Aceptamos efectivo, tarjeta y transferencia. Tenemos opciones vegetarianas y sin gluten.'};
- for (const k in defaults) document.querySelector('[name='+k+']').value = defaults[k];
- document.getElementById('bizform').dispatchEvent(new Event('submit', {cancelable:true}));
+ // Re-fetches server defaults by clearing and reloading via the cookie session would be easier;
+ // simplest path: reload the page so we get the prefilled values from the server again.
+ location.reload();
 }
+
+// Any keystroke in the form counts as editing the business
+document.getElementById('bizform').addEventListener('input', () => { bizEdited = true; clearHighlight(); });
+sidebar.addEventListener('click', () => { if (sidebar.classList.contains('ringed')) clearHighlight(); });
 
 loadHistory();
 </script>
