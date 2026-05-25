@@ -112,6 +112,10 @@ func writeSSE(w http.ResponseWriter, payload any) {
 
 func nowMillis() int64 { return time.Now().UnixNano() }
 
+// faviconDataURI is a tiny inline SVG of the Chalagente "C" mark in
+// terracotta on bone — embedded so we don't need to ship a separate asset.
+const faviconDataURI = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23b5482e'/><text x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-family='Georgia,serif' font-size='42' font-weight='700' fill='%23faf6ea'>C</text></svg>`
+
 // Diego Rivera "Fraternidad" palette: terracotta, ochre, indigo, deep green,
 // warm bone-white wall. Serif headings (painted-on-wall feel), gallery sans body.
 const sharedStyles = `
@@ -200,6 +204,7 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chalagente — Un agente IA que es tu chalán</title>
 <meta name="description" content="Chalagente atiende a tus clientes en su idioma, por WhatsApp. Para puestos de comida, electricistas, agencias de viaje y más.">
+<link rel="icon" href="` + faviconDataURI + `">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -481,6 +486,7 @@ var legalTmpl = template.Must(template.New("legal").Parse(`<!doctype html>
 <html lang="es-MX"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ .Title }} — Chalagente</title>
+<link rel="icon" href="` + faviconDataURI + `">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>` + sharedStyles + `
 .legal { max-width: 680px; margin: 3rem auto; padding: 0 1.5rem; }
