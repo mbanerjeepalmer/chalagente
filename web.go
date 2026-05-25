@@ -199,7 +199,7 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chalagente — Un agente IA que es tu chalán</title>
-<meta name="description" content="Chalagente atiende a tus clientes por WhatsApp 24/7. Para puestos de comida, electricistas, agencias de viaje y más.">
+<meta name="description" content="Chalagente atiende a tus clientes en su idioma, por WhatsApp. Para puestos de comida, electricistas, agencias de viaje y más.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -275,7 +275,7 @@ section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
   <div class="container hero-grid">
     <div>
       <h1 class="hero-title">Un agente IA<br><span class="accent">que es tu chalán</span></h1>
-      <p class="hero-sub">Chalagente atiende a tus clientes por WhatsApp con tu información, tus horarios y tu manera de hablar. Tú haces lo tuyo; él contesta.</p>
+      <p class="hero-sub">Chalagente atiende a tus clientes <strong>en su idioma</strong>, por WhatsApp. Tú haces lo tuyo; él contesta.</p>
       <div class="hero-cta">
         <a href="/demo" class="btn btn-primary">Probar demo →</a>
         <a href="/signup" class="btn btn-ghost">Iniciar sesión</a>
