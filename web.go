@@ -295,6 +295,20 @@ section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
   </div>
 </section>
 
+<section id="como" class="block">
+  <div class="container">
+    <div class="section-head">
+      <h2>Cómo funciona</h2>
+      <p>Tres pasos. Sin instalar nada. Sin código.</p>
+    </div>
+    <div class="steps">
+      <div class="step"><span class="num">1</span><h3>Cuéntale de tu negocio</h3><p>Escribe — o dicta con tu voz — quién eres, qué vendes y cómo atiendes.</p></div>
+      <div class="step"><span class="num">2</span><h3>Conecta tu WhatsApp</h3><p>Escanea el código QR desde la app, como un dispositivo más.</p></div>
+      <div class="step"><span class="num">3</span><h3>Chalagente responde</h3><p>Cuando un cliente menciona «Chalagente» en su mensaje, el agente contesta con tu información. Una vez mencionado en la conversación, sigue respondiendo a los siguientes mensajes.</p></div>
+    </div>
+  </div>
+</section>
+
 <section id="para-quien" class="block">
   <div class="container">
     <div class="section-head">
@@ -317,20 +331,6 @@ section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
         <h3>Agencias de viaje</h3>
         <p>Explica los paquetes, las fechas y los precios sin repetirte cien veces.</p>
       </div>
-    </div>
-  </div>
-</section>
-
-<section id="como" class="block">
-  <div class="container">
-    <div class="section-head">
-      <h2>Cómo funciona</h2>
-      <p>Tres pasos. Sin instalar nada. Sin código.</p>
-    </div>
-    <div class="steps">
-      <div class="step"><span class="num">1</span><h3>Cuéntale de tu negocio</h3><p>Escribe — o dicta con tu voz — quién eres, qué vendes y cómo atiendes.</p></div>
-      <div class="step"><span class="num">2</span><h3>Conecta tu WhatsApp</h3><p>Escanea el código QR desde la app, como un dispositivo más.</p></div>
-      <div class="step"><span class="num">3</span><h3>Chalagente responde</h3><p>Cuando un cliente menciona «Chalagente» en su mensaje, el agente contesta con tu información. Una vez mencionado en la conversación, sigue respondiendo a los siguientes mensajes.</p></div>
     </div>
   </div>
 </section>
