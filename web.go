@@ -116,6 +116,9 @@ func nowMillis() int64 { return time.Now().UnixNano() }
 // terracotta on bone — embedded so we don't need to ship a separate asset.
 const faviconDataURI = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23b5482e'/><text x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-family='Georgia,serif' font-size='42' font-weight='700' fill='%23faf6ea'>C</text></svg>`
 
+// githubURL is the public source repo, linked in the footer.
+const githubURL = "https://github.com/mbanerjeepalmer/chalagente"
+
 // Diego Rivera "Fraternidad" palette: terracotta, ochre, indigo, deep green,
 // warm bone-white wall. Serif headings (painted-on-wall feel), gallery sans body.
 const sharedStyles = `
@@ -192,6 +195,8 @@ footer { padding: 2rem 0 2.5rem; color: var(--muted); font-size: .85rem; border-
 footer .container { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
 footer a { color: var(--muted); text-decoration: none; margin-right: 1rem; }
 footer a:hover { color: var(--ink); }
+footer .foot-links { display: inline-flex; align-items: center; flex-wrap: wrap; gap: .25rem 1rem; }
+footer .foot-links a { margin-right: 0; }
 @media (max-width: 720px) {
   .nav-links a:not(.btn) { display: none; }
 }
@@ -436,11 +441,14 @@ section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
 <footer>
   <div class="container">
     <span>© Chalagente · Hecho en México</span>
-    <span>
+    <span class="foot-links">
       <a href="/privacidad">Aviso de privacidad</a>
       <a href="/terminos">Términos</a>
       <a href="/demo">Demo</a>
       <a href="/signup">Iniciar sesión</a>
+      <a href="` + githubURL + `" rel="noopener" aria-label="GitHub" title="GitHub">
+        <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-3px"><path fill="currentColor" d="M12 .5C5.73.5.75 5.48.75 11.75c0 4.95 3.21 9.14 7.66 10.62.56.1.77-.24.77-.54v-1.9c-3.11.68-3.77-1.5-3.77-1.5-.51-1.3-1.25-1.64-1.25-1.64-1.02-.7.08-.68.08-.68 1.13.08 1.72 1.16 1.72 1.16 1 1.72 2.63 1.22 3.27.94.1-.73.39-1.22.7-1.5-2.48-.28-5.09-1.24-5.09-5.52 0-1.22.44-2.22 1.15-3-.12-.28-.5-1.42.11-2.96 0 0 .94-.3 3.08 1.15a10.7 10.7 0 0 1 5.6 0c2.14-1.45 3.08-1.15 3.08-1.15.62 1.54.23 2.68.11 2.96.72.78 1.15 1.78 1.15 3 0 4.29-2.61 5.23-5.1 5.51.4.34.76 1.02.76 2.06v3.05c0 .3.2.65.78.54 4.45-1.48 7.66-5.67 7.66-10.62C23.25 5.48 18.27.5 12 .5z"/></svg>
+      </a>
     </span>
   </div>
 </footer>
@@ -504,6 +512,12 @@ var legalTmpl = template.Must(template.New("legal").Parse(`<!doctype html>
 </main>
 <footer><div class="container">
   <span>© Chalagente</span>
-  <span><a href="/privacidad">Aviso de privacidad</a><a href="/terminos">Términos</a></span>
+  <span class="foot-links">
+    <a href="/privacidad">Aviso de privacidad</a>
+    <a href="/terminos">Términos</a>
+    <a href="` + githubURL + `" rel="noopener" aria-label="GitHub" title="GitHub">
+      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-3px"><path fill="currentColor" d="M12 .5C5.73.5.75 5.48.75 11.75c0 4.95 3.21 9.14 7.66 10.62.56.1.77-.24.77-.54v-1.9c-3.11.68-3.77-1.5-3.77-1.5-.51-1.3-1.25-1.64-1.25-1.64-1.02-.7.08-.68.08-.68 1.13.08 1.72 1.16 1.72 1.16 1 1.72 2.63 1.22 3.27.94.1-.73.39-1.22.7-1.5-2.48-.28-5.09-1.24-5.09-5.52 0-1.22.44-2.22 1.15-3-.12-.28-.5-1.42.11-2.96 0 0 .94-.3 3.08 1.15a10.7 10.7 0 0 1 5.6 0c2.14-1.45 3.08-1.15 3.08-1.15.62 1.54.23 2.68.11 2.96.72.78 1.15 1.78 1.15 3 0 4.29-2.61 5.23-5.1 5.51.4.34.76 1.02.76 2.06v3.05c0 .3.2.65.78.54 4.45-1.48 7.66-5.67 7.66-10.62C23.25 5.48 18.27.5 12 .5z"/></svg>
+    </a>
+  </span>
 </div></footer>
 </body></html>`))
