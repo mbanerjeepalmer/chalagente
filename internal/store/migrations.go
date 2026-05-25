@@ -106,6 +106,13 @@ CREATE TABLE tool_configs (
 CREATE INDEX idx_tool_configs_business_id ON tool_configs(business_id);
 `,
 	},
+	{
+		name: "0002_clerk_user_id",
+		sql: `
+ALTER TABLE users ADD COLUMN clerk_user_id TEXT;
+CREATE UNIQUE INDEX idx_users_clerk_user_id ON users(clerk_user_id) WHERE clerk_user_id IS NOT NULL;
+`,
+	},
 }
 
 // runMigrations applies any pending migrations, in order. It creates the

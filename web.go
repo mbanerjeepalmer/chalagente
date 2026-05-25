@@ -16,10 +16,19 @@ func (a *App) Mux() http.Handler {
 	mux.HandleFunc("/privacidad", a.handlePrivacy)
 	mux.HandleFunc("/terminos", a.handleTerms)
 
-	mux.HandleFunc("GET /signup", a.Auth.SignupForm)
-	mux.HandleFunc("POST /signup", a.Auth.SignupSubmit)
-	mux.HandleFunc("/auth/verify", a.Auth.Verify)
-	mux.HandleFunc("POST /logout", a.Auth.Logout)
+	if a.ClerkAuth != nil {
+		mux.HandleFunc("GET /sign-in", a.ClerkAuth.SignInPage)
+		mux.HandleFunc("GET /sign-up", a.ClerkAuth.SignUpPage)
+		mux.HandleFunc("POST /logout", a.ClerkAuth.Logout)
+		mux.HandleFunc("GET /signup", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/sign-up", http.StatusSeeOther)
+		})
+	} else {
+		mux.HandleFunc("GET /signup", a.Auth.SignupForm)
+		mux.HandleFunc("POST /signup", a.Auth.SignupSubmit)
+		mux.HandleFunc("/auth/verify", a.Auth.Verify)
+		mux.HandleFunc("POST /logout", a.Auth.Logout)
+	}
 
 	mux.HandleFunc("/demo", a.handleTryPage)
 	mux.HandleFunc("/demo/business", a.handleTryBusiness)
@@ -45,12 +54,12 @@ func (a *App) Mux() http.Handler {
 	protected.HandleFunc("/app/events", a.handleDashboardEvents)
 	protected.HandleFunc("/app/qr.png", a.handleDashboardShareQR)
 
-	mux.Handle("/onboarding", a.Auth.Middleware(protected))
-	mux.Handle("/onboarding/", a.Auth.Middleware(protected))
-	mux.Handle("/app", a.Auth.Middleware(protected))
-	mux.Handle("/app/", a.Auth.Middleware(protected))
-	mux.Handle("/admin", a.Auth.Middleware(protected))
-	mux.Handle("/admin/", a.Auth.Middleware(protected))
+	mux.Handle("/onboarding", a.authMiddleware(protected))
+	mux.Handle("/onboarding/", a.authMiddleware(protected))
+	mux.Handle("/app", a.authMiddleware(protected))
+	mux.Handle("/app/", a.authMiddleware(protected))
+	mux.Handle("/admin", a.authMiddleware(protected))
+	mux.Handle("/admin/", a.authMiddleware(protected))
 
 	return mux
 }

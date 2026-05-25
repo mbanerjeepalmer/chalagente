@@ -95,9 +95,10 @@ func parseTime(s string) time.Time {
 
 // User is a signed-up account. One user owns at most one Business in v2.
 type User struct {
-	ID        string
-	Email     string
-	CreatedAt time.Time
+	ID          string
+	Email       string
+	ClerkUserID string
+	CreatedAt   time.Time
 }
 
 // Session is a cookie-backed login session.
@@ -190,17 +191,92 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (User, error) 
 func (s *Store) getUserWhere(ctx context.Context, where string, arg string) (User, error) {
 	var u User
 	var createdAt string
+	var clerkID sql.NullString
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, email, created_at FROM users WHERE `+where,
+		`SELECT id, email, clerk_user_id, created_at FROM users WHERE `+where,
 		arg,
-	).Scan(&u.ID, &u.Email, &createdAt)
+	).Scan(&u.ID, &u.Email, &clerkID, &createdAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrNotFound
 	}
 	if err != nil {
 		return User{}, fmt.Errorf("get user: %w", err)
 	}
+	if clerkID.Valid {
+		u.ClerkUserID = clerkID.String
+	}
 	u.CreatedAt = parseTime(createdAt)
+	return u, nil
+}
+
+// GetUserByClerkID fetches a user by their Clerk user ID.
+func (s *Store) GetUserByClerkID(ctx context.Context, clerkID string) (User, error) {
+	return s.getUserWhere(ctx, "clerk_user_id = ?", clerkID)
+}
+
+// LinkClerkUser sets the clerk_user_id on an existing user row. Returns
+// ErrNotFound if no row was updated.
+func (s *Store) LinkClerkUser(ctx context.Context, userID, clerkID string) error {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE users SET clerk_user_id = ? WHERE id = ?`,
+		clerkID, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("link clerk user: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("link clerk user: rows affected: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// EnsureUserByClerk returns the local user for a Clerk user, creating or
+// linking as needed. clerkID is required; email is optional but used when
+// creating a brand new local user (Clerk is the source of truth there).
+func (s *Store) EnsureUserByClerk(ctx context.Context, clerkID, email string) (User, error) {
+	if clerkID == "" {
+		return User{}, fmt.Errorf("ensure user by clerk: empty clerk id")
+	}
+	if email == "" {
+		return User{}, fmt.Errorf("ensure user by clerk: empty email")
+	}
+	if u, err := s.GetUserByClerkID(ctx, clerkID); err == nil {
+		return u, nil
+	} else if !errors.Is(err, ErrNotFound) {
+		return User{}, err
+	}
+	// No row for this clerk_user_id yet. If we have an email, try linking an
+	// existing magic-link account before creating a fresh row.
+	if email != "" {
+		if u, err := s.GetUserByEmail(ctx, email); err == nil {
+			if err := s.LinkClerkUser(ctx, u.ID, clerkID); err != nil {
+				return User{}, err
+			}
+			u.ClerkUserID = clerkID
+			return u, nil
+		} else if !errors.Is(err, ErrNotFound) {
+			return User{}, err
+		}
+	}
+	// Create a new user. Email may be empty; we'll backfill it once Clerk's
+	// user API is queried.
+	u := User{
+		ID:          uuid.NewString(),
+		Email:       email,
+		ClerkUserID: clerkID,
+		CreatedAt:   time.Now().UTC(),
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO users(id, email, clerk_user_id, created_at) VALUES(?, ?, ?, ?)`,
+		u.ID, u.Email, u.ClerkUserID, u.CreatedAt.Format(time.RFC3339Nano),
+	)
+	if err != nil {
+		return User{}, fmt.Errorf("create clerk user: %w", err)
+	}
 	return u, nil
 }
 

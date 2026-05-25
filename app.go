@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"net/http"
 	"sync"
 	"time"
 
 	"github.com/mbanerjeepalmer/chalagente/internal/agent"
 	"github.com/mbanerjeepalmer/chalagente/internal/auth"
+	"github.com/mbanerjeepalmer/chalagente/internal/clerkauth"
 	"github.com/mbanerjeepalmer/chalagente/internal/maps"
 	"github.com/mbanerjeepalmer/chalagente/internal/store"
 	"github.com/mbanerjeepalmer/chalagente/internal/voice"
@@ -19,8 +21,9 @@ type App struct {
 	Agent    agent.Engine
 	Voice    voice.Provider
 	Maps     maps.Client
-	Auth     *auth.Handlers
-	BaseURL  string
+	Auth      *auth.Handlers
+	ClerkAuth *clerkauth.Handlers
+	BaseURL   string
 
 	busMu  sync.Mutex
 	recent map[string][]Event
@@ -49,6 +52,39 @@ type pairSession struct {
 	deviceJID string
 	done      bool
 	cancel    context.CancelFunc
+}
+
+// userIDFrom returns the authenticated local user id from the request
+// context, regardless of which auth provider populated it.
+func (a *App) userIDFrom(r *http.Request) (string, bool) {
+	if a.ClerkAuth != nil {
+		if id, ok := a.ClerkAuth.UserIDFrom(r.Context()); ok {
+			return id, true
+		}
+	}
+	if a.Auth != nil {
+		if id, ok := a.Auth.UserIDFrom(r.Context()); ok {
+			return id, true
+		}
+	}
+	return "", false
+}
+
+// signInPath returns the URL path to redirect unauthenticated users to.
+func (a *App) signInPath() string {
+	if a.ClerkAuth != nil {
+		return "/sign-in"
+	}
+	return "/signup"
+}
+
+// authMiddleware returns the active auth middleware. Panics if neither
+// auth provider is configured (only happens in misconfigured runtime).
+func (a *App) authMiddleware(next http.Handler) http.Handler {
+	if a.ClerkAuth != nil {
+		return a.ClerkAuth.Middleware(next)
+	}
+	return a.Auth.Middleware(next)
 }
 
 func newApp() *App {

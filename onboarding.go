@@ -43,9 +43,9 @@ func (a *App) ensureBusiness(ctx context.Context, userID string) (store.Business
 }
 
 func (a *App) requireBusiness(w http.ResponseWriter, r *http.Request) (store.Business, bool) {
-	userID, ok := a.Auth.UserIDFrom(r.Context())
+	userID, ok := a.userIDFrom(r)
 	if !ok {
-		http.Redirect(w, r, "/signup", http.StatusSeeOther)
+		http.Redirect(w, r, a.signInPath(), http.StatusSeeOther)
 		return store.Business{}, false
 	}
 	b, err := a.ensureBusiness(r.Context(), userID)

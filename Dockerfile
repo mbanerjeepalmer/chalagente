@@ -16,6 +16,11 @@ ENV HTTP_ADDR=:8080
 ENV COOKIE_SECURE=true
 # BASE_URL must be set at runtime to your public origin, e.g.
 # https://chalagente.example.com — magic-link URLs are built from it.
+# Clerk (optional, enables Clerk-hosted auth when CLERK_SECRET_KEY is set):
+#   CLERK_SECRET_KEY=sk_...
+#   CLERK_PUBLISHABLE_KEY=pk_...
+#   CLERK_FRONTEND_API=happy-cat-12.clerk.accounts.dev
+#   CLERK_AFTER_SIGN_IN_URL=/onboarding
 VOLUME ["/data"]
 EXPOSE 8080
 ENTRYPOINT ["/server"]
