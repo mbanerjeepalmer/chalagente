@@ -53,6 +53,7 @@ func (a *App) Mux() http.Handler {
 	protected.HandleFunc("/app/business", a.handleDashboardBusiness)
 	protected.HandleFunc("/app/events", a.handleDashboardEvents)
 	protected.HandleFunc("/app/qr.png", a.handleDashboardShareQR)
+	protected.HandleFunc("POST /app/whatsapp/unpair", a.handleDashboardUnpair)
 
 	mux.Handle("/onboarding", a.authMiddleware(protected))
 	mux.Handle("/onboarding/", a.authMiddleware(protected))

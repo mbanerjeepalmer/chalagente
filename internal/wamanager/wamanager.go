@@ -167,6 +167,22 @@ func (m *Manager) StartPaired(ctx context.Context, businessID string, deviceJID 
 	return nil
 }
 
+// Logout tells WhatsApp servers to drop this linked device, wipes the local
+// whatsmeow store row, and untracks the entry. Returns ErrNotRegistered if
+// the business has no live client (in which case there is nothing to log out
+// — the caller should still clear any persisted device JID).
+func (m *Manager) Logout(ctx context.Context, businessID string) error {
+	m.mu.RLock()
+	e, ok := m.byBiz[businessID]
+	m.mu.RUnlock()
+	if !ok {
+		return ErrNotRegistered
+	}
+	err := e.Client.Logout(ctx)
+	m.untrack(businessID)
+	return err
+}
+
 func (m *Manager) Disconnect(businessID string) {
 	m.mu.RLock()
 	e, ok := m.byBiz[businessID]

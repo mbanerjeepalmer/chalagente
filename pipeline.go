@@ -87,6 +87,10 @@ func (a *App) processIncoming(businessID string, msg *events.Message) {
 		log.Printf("pipeline: list history: %v", err)
 	}
 
+	if !chatHasTrigger(history, body) {
+		return
+	}
+
 	bc := businessContextFor(biz)
 	req := agent.Request{
 		SystemPrompt: agent.BuildSystemPrompt(bc),
@@ -128,6 +132,26 @@ func (a *App) processIncoming(businessID string, msg *events.Message) {
 		Body:       reply.Text,
 		Kind:       "text",
 	})
+}
+
+// triggerKeyword gates the agent: it only replies when this word appears
+// somewhere in the conversation (history or the incoming message).
+const triggerKeyword = "chalagente"
+
+func chatHasTrigger(history []store.Message, incoming string) bool {
+	if containsTrigger(incoming) {
+		return true
+	}
+	for _, m := range history {
+		if containsTrigger(m.Body) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsTrigger(s string) bool {
+	return strings.Contains(strings.ToLower(s), triggerKeyword)
 }
 
 func extractMessage(msg *events.Message) (body, kind string) {

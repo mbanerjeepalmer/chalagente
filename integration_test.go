@@ -256,6 +256,56 @@ func TestMapsSearchInOnboarding(t *testing.T) {
 	}
 }
 
+func TestUnpairWhatsAppClearsDeviceJID(t *testing.T) {
+	a, mail := newTestApp(t)
+	srv := httptest.NewServer(a.Mux())
+	defer srv.Close()
+	a.Auth.BaseURL = srv.URL
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+
+	if _, err := client.PostForm(srv.URL+"/signup", url.Values{"email": []string{"u@x.com"}}); err != nil {
+		t.Fatalf("signup: %v", err)
+	}
+	res, err := client.Get(mail.lastURL())
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	res.Body.Close()
+
+	u, err := a.Store.GetUserByEmail(context.Background(), "u@x.com")
+	if err != nil {
+		t.Fatalf("GetUserByEmail: %v", err)
+	}
+	biz, err := a.Store.GetBusinessByUserID(context.Background(), u.ID)
+	if err != nil {
+		t.Fatalf("GetBusinessByUserID: %v", err)
+	}
+	biz.Name = "Café X"
+	biz.WADeviceJID = "447700900123:1@s.whatsapp.net"
+	if err := a.Store.UpdateBusiness(context.Background(), biz); err != nil {
+		t.Fatalf("UpdateBusiness: %v", err)
+	}
+
+	res, err = client.PostForm(srv.URL+"/app/whatsapp/unpair", url.Values{})
+	if err != nil {
+		t.Fatalf("POST unpair: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != 200 && res.StatusCode != http.StatusSeeOther && res.StatusCode != http.StatusFound {
+		t.Fatalf("unpair status: %d", res.StatusCode)
+	}
+
+	after, err := a.Store.GetBusinessByUserID(context.Background(), u.ID)
+	if err != nil {
+		t.Fatalf("GetBusinessByUserID after: %v", err)
+	}
+	if after.WADeviceJID != "" {
+		t.Fatalf("WADeviceJID not cleared: %q", after.WADeviceJID)
+	}
+}
+
 func first(s string, n int) string {
 	if len(s) <= n {
 		return s
