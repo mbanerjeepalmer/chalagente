@@ -714,6 +714,35 @@ func (s *Store) ListConversations(ctx context.Context, businessID string, limit 
 	return out, nil
 }
 
+// DeleteChatHistory removes every conversation and every message belonging
+// to businessID, in a single transaction. Used when a tenant unpairs their
+// WhatsApp number — the spec is "deletes your chat history from
+// chalagente.com but doesn't touch your WhatsApp".
+func (s *Store) DeleteChatHistory(ctx context.Context, businessID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin delete history: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM messages WHERE conversation_id IN
+			(SELECT id FROM conversations WHERE business_id = ?)`,
+		businessID,
+	); err != nil {
+		return fmt.Errorf("delete messages: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM conversations WHERE business_id = ?`,
+		businessID,
+	); err != nil {
+		return fmt.Errorf("delete conversations: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit delete history: %w", err)
+	}
+	return nil
+}
+
 // ----- Tools -----
 
 // SetTool upserts a tool config for (businessID, key). If a row already
