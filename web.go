@@ -13,6 +13,8 @@ func (a *App) Mux() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", a.handleLanding)
 	mux.HandleFunc("/healthz", a.handleHealth)
+	mux.HandleFunc("/privacidad", a.handlePrivacy)
+	mux.HandleFunc("/terminos", a.handleTerms)
 
 	mux.HandleFunc("GET /signup", a.Auth.SignupForm)
 	mux.HandleFunc("POST /signup", a.Auth.SignupSubmit)
@@ -37,6 +39,7 @@ func (a *App) Mux() http.Handler {
 	protected.HandleFunc("/onboarding/finish", a.handleOnboardingFinish)
 
 	protected.HandleFunc("/app", a.handleDashboard)
+	protected.HandleFunc("/admin", a.handleDashboard)
 	protected.HandleFunc("/app/agent", a.handleDashboardAgentToggle)
 	protected.HandleFunc("/app/business", a.handleDashboardBusiness)
 	protected.HandleFunc("/app/events", a.handleDashboardEvents)
@@ -46,6 +49,8 @@ func (a *App) Mux() http.Handler {
 	mux.Handle("/onboarding/", a.Auth.Middleware(protected))
 	mux.Handle("/app", a.Auth.Middleware(protected))
 	mux.Handle("/app/", a.Auth.Middleware(protected))
+	mux.Handle("/admin", a.Auth.Middleware(protected))
+	mux.Handle("/admin/", a.Auth.Middleware(protected))
 
 	return mux
 }
@@ -77,6 +82,16 @@ func (a *App) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte("ok"))
 }
 
+func (a *App) handlePrivacy(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = legalTmpl.Execute(w, legalPage{Title: "Aviso de privacidad", Body: privacyBody})
+}
+
+func (a *App) handleTerms(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = legalTmpl.Execute(w, legalPage{Title: "Términos del servicio", Body: termsBody})
+}
+
 func writeSSE(w http.ResponseWriter, payload any) {
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -87,127 +102,308 @@ func writeSSE(w http.ResponseWriter, payload any) {
 
 func nowMillis() int64 { return time.Now().UnixNano() }
 
+// Diego Rivera "Fraternidad" palette: terracotta, ochre, indigo, deep green,
+// warm bone-white wall. Serif headings (painted-on-wall feel), gallery sans body.
+const sharedStyles = `
+:root {
+  --wall: #f1ead9;
+  --wall-shade: #e6dec7;
+  --plaster: #ece2cb;
+  --ink: #1c1a16;
+  --ink-soft: #3a352c;
+  --muted: #6b6354;
+  --line: rgba(28,26,22,0.14);
+  --terracotta: #b5482e;
+  --terracotta-deep: #8a3320;
+  --ochre: #c8932b;
+  --indigo: #25406e;
+  --leaf: #4f6a3a;
+  --bone: #faf6ea;
+  --radius: 6px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  background: var(--wall);
+  color: var(--ink-soft);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(rgba(110,90,60,0.05) 1px, transparent 1px),
+    radial-gradient(rgba(80,60,40,0.04) 1px, transparent 1px),
+    linear-gradient(180deg, var(--wall), var(--wall-shade));
+  background-size: 3px 3px, 7px 7px, 100% 100%;
+  background-position: 0 0, 1px 2px, 0 0;
+}
+h1, h2, h3, h4 {
+  font-family: "Cormorant Garamond", "Playfair Display", Georgia, "Times New Roman", serif;
+  color: var(--ink);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.15;
+}
+a { color: var(--terracotta-deep); }
+.container { max-width: 1080px; margin: 0 auto; padding: 0 1.5rem; }
+header.nav {
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(241,234,217,0.92);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--line);
+}
+.nav-inner { display: flex; align-items: center; justify-content: space-between; padding: 1rem 0; }
+.logo { display: flex; align-items: center; gap: .6rem; font-family: "Cormorant Garamond", serif; font-weight: 700; font-size: 1.35rem; color: var(--ink); text-decoration: none; letter-spacing: .01em; }
+.logo-mark {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--terracotta);
+  display: grid; place-items: center; color: var(--bone);
+  font-family: "Cormorant Garamond", serif; font-weight: 700; font-size: 1rem;
+  box-shadow: inset 0 -2px 0 rgba(0,0,0,0.15);
+}
+.nav-links { display: flex; gap: 1.4rem; align-items: center; font-size: .92rem; color: var(--ink-soft); }
+.nav-links a { color: var(--ink-soft); text-decoration: none; }
+.nav-links a:hover { color: var(--terracotta-deep); }
+.btn {
+  display: inline-flex; align-items: center; gap: .5rem;
+  padding: .7rem 1.2rem; border-radius: var(--radius);
+  font-weight: 600; font-size: .95rem; text-decoration: none;
+  transition: transform .12s ease, box-shadow .15s ease;
+  border: 1px solid transparent;
+}
+.btn-primary { background: var(--terracotta); color: var(--bone); box-shadow: 0 2px 0 var(--terracotta-deep); }
+.btn-primary:hover { transform: translateY(-1px); }
+.btn-ghost { background: transparent; color: var(--ink); border-color: var(--ink); }
+.btn-ghost:hover { background: rgba(28,26,22,0.05); }
+footer { padding: 2rem 0 2.5rem; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--line); margin-top: 3rem; }
+footer .container { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+footer a { color: var(--muted); text-decoration: none; margin-right: 1rem; }
+footer a:hover { color: var(--ink); }
+@media (max-width: 720px) {
+  .nav-links a:not(.btn) { display: none; }
+}
+`
+
 var landingTmpl = template.Must(template.New("landing").Parse(`<!doctype html>
-<html lang="es">
+<html lang="es-MX">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Chalagente — Atención al cliente por WhatsApp con IA</title>
-<meta name="description" content="Un agente de IA que responde las preguntas de tus clientes en WhatsApp, 24/7.">
-<style>
- :root { --bg:#0b0f14; --bg-soft:#11161d; --panel:#141b24; --border:rgba(255,255,255,0.08); --text:#e7edf3; --muted:#8a96a6; --accent:#25d366; --accent-2:#128c7e; --radius:14px; }
- * { box-sizing: border-box; }
- html, body { margin: 0; padding: 0; }
- body { font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; -webkit-font-smoothing: antialiased; }
- a { color: inherit; text-decoration: none; }
- .container { max-width: 1120px; margin: 0 auto; padding: 0 1.5rem; }
- header.nav { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(12px); background: rgba(11,15,20,0.7); border-bottom: 1px solid var(--border); }
- .nav-inner { display: flex; align-items: center; justify-content: space-between; padding: 1rem 0; }
- .logo { display: flex; align-items: center; gap: .6rem; font-weight: 700; letter-spacing: -0.01em; }
- .logo-mark { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: grid; place-items: center; color: #04130b; font-weight: 800; }
- .nav-links { display: flex; gap: 1.5rem; align-items: center; color: var(--muted); font-size: .92rem; }
- .nav-links a:hover { color: var(--text); }
- .btn { display: inline-flex; align-items: center; gap: .5rem; padding: .7rem 1.1rem; border-radius: 999px; font-weight: 600; transition: transform .12s ease, box-shadow .2s ease; font-size: .95rem; }
- .btn-primary { background: var(--accent); color: #04130b; box-shadow: 0 8px 24px rgba(37,211,102,0.25); }
- .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(37,211,102,0.35); }
- .btn-ghost { border: 1px solid var(--border); color: var(--text); }
- .btn-ghost:hover { background: var(--bg-soft); }
- section.hero { position: relative; overflow: hidden; padding: 5.5rem 0 4rem; }
- .hero::before { content: ""; position: absolute; inset: -20% 30% 40% -20%; background: radial-gradient(closest-side, rgba(37,211,102,0.22), transparent 70%); filter: blur(20px); z-index: 0; }
- .hero-grid { position: relative; z-index: 1; display: grid; grid-template-columns: 1.1fr .9fr; gap: 3rem; align-items: center; }
- .eyebrow { display: inline-flex; align-items: center; gap: .5rem; padding: .35rem .75rem; border-radius: 999px; background: rgba(37,211,102,0.1); color: #7be4a8; border: 1px solid rgba(37,211,102,0.25); font-size: .8rem; font-weight: 600; }
- .eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(37,211,102,0.2); }
- h1.hero-title { font-size: clamp(2.2rem, 4.5vw, 3.4rem); line-height: 1.1; letter-spacing: -0.02em; margin: 1rem 0 1rem; }
- .hero-title .grad { background: linear-gradient(135deg, #7be4a8, var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
- .hero-sub { color: var(--muted); font-size: 1.1rem; max-width: 30rem; }
- .hero-cta { display: flex; gap: .75rem; margin-top: 1.75rem; flex-wrap: wrap; }
- .phone { position: relative; justify-self: center; width: 320px; max-width: 100%; background: #0c1117; border: 1px solid var(--border); border-radius: 36px; padding: 16px; box-shadow: 0 30px 80px rgba(0,0,0,0.5); }
- .phone-screen { background: #0e1620; border-radius: 22px; overflow: hidden; height: 480px; display: flex; flex-direction: column; }
- .phone-header { display: flex; align-items: center; gap: .6rem; padding: .8rem 1rem; background: #122131; border-bottom: 1px solid var(--border); }
- .avatar { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent-2)); display: grid; place-items: center; font-weight: 700; color: #04130b; font-size: .9rem; }
- .phone-header .name { font-weight: 600; font-size: .9rem; }
- .phone-header .sub  { color: var(--muted); font-size: .72rem; }
- .chat { flex: 1; padding: 1rem; display: flex; flex-direction: column; gap: .5rem; overflow: hidden; background: #0e1620; }
- .bubble { max-width: 80%; padding: .55rem .75rem; border-radius: 14px; font-size: .85rem; line-height: 1.35; }
- .bubble.in { background: #1b2735; color: var(--text); border-bottom-left-radius: 4px; align-self: flex-start; }
- .bubble.out { background: #1f6f4a; color: #f0fff5; border-bottom-right-radius: 4px; align-self: flex-end; }
- section.block { padding: 4.5rem 0; border-top: 1px solid var(--border); }
- .section-head { text-align: center; max-width: 38rem; margin: 0 auto 2.5rem; }
- .section-head h2 { font-size: clamp(1.7rem, 3vw, 2.3rem); letter-spacing: -0.01em; margin: .5rem 0 .75rem; }
- .section-head p { color: var(--muted); margin: 0; }
- .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
- .feature { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; }
- .feature .icon { width: 40px; height: 40px; border-radius: 10px; background: rgba(37,211,102,0.12); color: var(--accent); display: grid; place-items: center; margin-bottom: .9rem; font-size: 1.3rem; }
- .feature h3 { margin: 0 0 .35rem; font-size: 1.05rem; }
- .feature p  { margin: 0; color: var(--muted); font-size: .92rem; }
- .cta { background: linear-gradient(135deg, rgba(37,211,102,0.12), rgba(18,140,126,0.08)); border: 1px solid rgba(37,211,102,0.25); border-radius: var(--radius); padding: 2.5rem; text-align: center; }
- .cta h2 { margin: 0 0 .5rem; font-size: 1.75rem; letter-spacing: -0.01em; }
- .cta p { color: var(--muted); margin: 0 0 1.5rem; }
- footer { padding: 2rem 0 3rem; color: var(--muted); font-size: .85rem; text-align: center; border-top: 1px solid var(--border); margin-top: 2rem; }
- @media (max-width: 820px) { .hero-grid { grid-template-columns: 1fr; } .features { grid-template-columns: 1fr; } .phone { width: 280px; } .nav-links a:not(.btn) { display: none; } }
-</style>
-</head>
+<title>Chalagente — Un agente IA que es tu chalán</title>
+<meta name="description" content="Chalagente atiende a tus clientes por WhatsApp 24/7. Para puestos de comida, electricistas, agencias de viaje y más.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>` + sharedStyles + `
+section.hero { padding: 4.5rem 0 3.5rem; position: relative; }
+.hero-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 3rem; align-items: center; }
+h1.hero-title { font-size: clamp(2.4rem, 5vw, 3.8rem); margin: 0 0 1rem; color: var(--ink); }
+h1.hero-title .accent { color: var(--terracotta-deep); font-style: italic; }
+.hero-sub { font-size: 1.15rem; color: var(--ink-soft); max-width: 32rem; margin: 0 0 1.75rem; }
+.hero-cta { display: flex; gap: .75rem; flex-wrap: wrap; }
+.muralcard {
+  background: var(--bone);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.5rem 1.6rem;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 8px 28px rgba(40,30,15,0.08);
+}
+.muralcard .stripe { display: flex; height: 6px; margin: -1.5rem -1.6rem 1.2rem; border-radius: var(--radius) var(--radius) 0 0; overflow: hidden; }
+.muralcard .stripe span { flex: 1; }
+.muralcard h3 { margin: .25rem 0 .5rem; font-size: 1.4rem; }
+.muralcard p { margin: 0; color: var(--ink-soft); }
+section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
+.section-head { max-width: 38rem; margin: 0 auto 2.5rem; text-align: center; }
+.section-head h2 { font-size: clamp(2rem, 3.5vw, 2.6rem); margin: 0 0 .5rem; }
+.section-head p { color: var(--muted); margin: 0; }
+.threecol { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+.tile {
+  background: var(--bone);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.5rem 1.4rem;
+}
+.tile .swatch { width: 36px; height: 36px; border-radius: 50%; margin-bottom: .9rem; box-shadow: inset 0 -2px 0 rgba(0,0,0,0.12); }
+.tile h3 { margin: 0 0 .4rem; font-size: 1.25rem; }
+.tile p { margin: 0; color: var(--ink-soft); font-size: .95rem; }
+.steps { counter-reset: step; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+.step { background: var(--plaster); border-radius: var(--radius); padding: 1.5rem; border: 1px solid var(--line); }
+.step .num { font-family: "Cormorant Garamond", serif; font-size: 2.4rem; color: var(--terracotta); display: block; line-height: 1; margin-bottom: .4rem; }
+.step h3 { margin: 0 0 .35rem; font-size: 1.2rem; }
+.step p { margin: 0; color: var(--ink-soft); }
+.warn {
+  background: rgba(181,72,46,0.08);
+  border-left: 4px solid var(--terracotta);
+  padding: 1rem 1.2rem;
+  border-radius: var(--radius);
+  margin-top: 1.25rem;
+  font-size: .95rem;
+  color: var(--ink);
+}
+.cta-block { background: var(--bone); border: 1px solid var(--line); border-radius: var(--radius); padding: 2.5rem; text-align: center; }
+.cta-block h2 { margin: 0 0 .5rem; font-size: 2rem; }
+.cta-block p { color: var(--muted); margin: 0 0 1.5rem; }
+@media (max-width: 820px) {
+  .hero-grid { grid-template-columns: 1fr; }
+  .threecol, .steps { grid-template-columns: 1fr; }
+}
+</style></head>
 <body>
 <header class="nav">
- <div class="container nav-inner">
-  <div class="logo"><div class="logo-mark">C</div><span>Chalagente</span></div>
-  <nav class="nav-links">
-   <a href="#features">Características</a>
-   <a href="#how">Cómo funciona</a>
-   <a href="/demo" class="btn btn-primary">Probar ahora</a>
-  </nav>
- </div>
+  <div class="container nav-inner">
+    <a class="logo" href="/"><span class="logo-mark">C</span><span>Chalagente</span></a>
+    <nav class="nav-links">
+      <a href="#para-quien">Para quién</a>
+      <a href="#como">Cómo funciona</a>
+      <a href="/demo">Demo</a>
+      <a href="/signup">Iniciar sesión</a>
+      <a href="/demo" class="btn btn-primary">Probar demo</a>
+    </nav>
+  </div>
 </header>
+
 <section class="hero">
- <div class="container hero-grid">
-  <div>
-   <span class="eyebrow"><span class="dot"></span> IA conversacional para WhatsApp</span>
-   <h1 class="hero-title">Responde a tus clientes <span class="grad">al instante</span>, sin levantar el teléfono.</h1>
-   <p class="hero-sub">Chalagente es un agente de IA que atiende las preguntas de tu negocio por WhatsApp — el canal donde tus clientes ya están — las 24 horas del día.</p>
-   <div class="hero-cta">
-    <a href="/demo" class="btn btn-primary">Probar ahora →</a>
-    <a href="/signup" class="btn btn-ghost">Crear cuenta</a>
-   </div>
-   <p style="margin-top:.6rem;color:var(--muted);font-size:.85rem">Sin registro · Chatea con un agente de demo en 5 segundos</p>
-  </div>
-  <div class="phone" aria-hidden="true">
-   <div class="phone-screen">
-    <div class="phone-header">
-     <div class="avatar">C</div>
-     <div><div class="name">Tu Negocio</div><div class="sub">en línea</div></div>
+  <div class="container hero-grid">
+    <div>
+      <h1 class="hero-title">Un agente IA<br><span class="accent">que es tu chalán</span></h1>
+      <p class="hero-sub">Chalagente atiende a tus clientes por WhatsApp con tu información, tus horarios y tu manera de hablar. Tú haces lo tuyo; él contesta.</p>
+      <div class="hero-cta">
+        <a href="/demo" class="btn btn-primary">Probar demo →</a>
+        <a href="/signup" class="btn btn-ghost">Iniciar sesión</a>
+      </div>
     </div>
-    <div class="chat">
-     <div class="bubble in">Hola, ¿a qué hora abren mañana?</div>
-     <div class="bubble out">¡Hola! Abrimos de 9:00 a 20:00 todos los días.</div>
-     <div class="bubble in">¿Aceptan tarjeta?</div>
-     <div class="bubble out">Sí, aceptamos todas las tarjetas y también transferencia.</div>
+    <aside class="muralcard">
+      <div class="stripe">
+        <span style="background:var(--terracotta)"></span>
+        <span style="background:var(--ochre)"></span>
+        <span style="background:var(--leaf)"></span>
+        <span style="background:var(--indigo)"></span>
+        <span style="background:var(--bone)"></span>
+      </div>
+      <h3>“¿A qué hora abren mañana?”</h3>
+      <p>Tu cliente pregunta por WhatsApp. Chalagente responde al instante con la información de tu negocio — texto, voz, foto o video.</p>
+    </aside>
+  </div>
+</section>
+
+<section id="para-quien" class="block">
+  <div class="container">
+    <div class="section-head">
+      <h2>Chalagente ayuda a tus clientes a entender tu negocio</h2>
+      <p>Hecho para los oficios donde WhatsApp es la puerta de entrada.</p>
     </div>
-   </div>
+    <div class="threecol">
+      <div class="tile">
+        <div class="swatch" style="background:var(--terracotta)"></div>
+        <h3>Puestos de comida</h3>
+        <p>Explica los tacos a los gringos, sin perder al cliente que sí va a llegar.</p>
+      </div>
+      <div class="tile">
+        <div class="swatch" style="background:var(--ochre)"></div>
+        <h3>Electricistas</h3>
+        <p>Haz la consulta inicial mientras estás en otra chamba.</p>
+      </div>
+      <div class="tile">
+        <div class="swatch" style="background:var(--indigo)"></div>
+        <h3>Agencias de viaje</h3>
+        <p>Explica los paquetes, las fechas y los precios sin repetirte cien veces.</p>
+      </div>
+    </div>
   </div>
- </div>
 </section>
-<section id="features" class="block">
- <div class="container">
-  <div class="section-head">
-   <h2>Todo lo que necesitas para automatizar la atención</h2>
-   <p>Pensado para pequeños y medianos negocios que viven en WhatsApp.</p>
+
+<section id="como" class="block">
+  <div class="container">
+    <div class="section-head">
+      <h2>Cómo funciona</h2>
+      <p>Tres pasos. Sin instalar nada. Sin código.</p>
+    </div>
+    <div class="steps">
+      <div class="step"><span class="num">1</span><h3>Cuéntale de tu negocio</h3><p>Escribe — o dicta con tu voz — quién eres, qué vendes y cómo atiendes.</p></div>
+      <div class="step"><span class="num">2</span><h3>Conecta tu WhatsApp</h3><p>Escanea el código QR desde la app, como un dispositivo más.</p></div>
+      <div class="step"><span class="num">3</span><h3>Chalagente responde</h3><p>Cuando un cliente te escribe, Chalagente contesta con tu información.</p></div>
+    </div>
   </div>
-  <div class="features">
-   <div class="feature"><div class="icon">💬</div><h3>WhatsApp nativo</h3><p>Tus clientes escriben al mismo número de siempre. Sin descargas, sin formularios.</p></div>
-   <div class="feature"><div class="icon">🤖</div><h3>Agente de IA</h3><p>Entrenado con la información de tu negocio: horarios, precios, ubicación, productos.</p></div>
-   <div class="feature"><div class="icon">⚡</div><h3>Respuestas 24/7</h3><p>Atiende mientras duermes, en vacaciones o cuando estás con un cliente.</p></div>
-  </div>
- </div>
 </section>
-<section id="how" class="block">
- <div class="container">
-  <div class="cta">
-   <h2>¿Listo para no perder otro mensaje?</h2>
-   <p>Prueba el agente ahora mismo, sin registrarte. Luego conecta tu WhatsApp en minutos.</p>
-   <a href="/demo" class="btn btn-primary">Probar el agente →</a>
+
+<section class="block">
+  <div class="container">
+    <div class="section-head">
+      <h2>WhatsApp como siempre</h2>
+      <p>Funciona con texto, notas de voz, imágenes y video.</p>
+    </div>
+    <div class="warn">
+      <strong>Atención:</strong> Chalagente ve todos los mensajes de la cuenta que conectes. Conecta solo un número dedicado a tu negocio.
+    </div>
   </div>
- </div>
 </section>
-<footer><div class="container">© Chalagente · Atención al cliente con IA por WhatsApp</div></footer>
+
+<section class="block">
+  <div class="container">
+    <div class="cta-block">
+      <h2>Pruébalo ahora</h2>
+      <p>Chatea con un agente prellenado en cinco segundos. Sin registro.</p>
+      <a href="/demo" class="btn btn-primary">Abrir demo →</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <span>© Chalagente · Hecho en México</span>
+    <span>
+      <a href="/privacidad">Aviso de privacidad</a>
+      <a href="/terminos">Términos</a>
+      <a href="/demo">Demo</a>
+      <a href="/signup">Iniciar sesión</a>
+    </span>
+  </div>
+</footer>
 </body>
 </html>`))
+
+type legalPage struct {
+	Title string
+	Body  template.HTML
+}
+
+var privacyBody = template.HTML(`
+<p>Chalagente conecta con tu cuenta de WhatsApp para leer los mensajes entrantes y responder en tu nombre. Guardamos:</p>
+<ul>
+  <li>Los datos de tu negocio que tú nos das.</li>
+  <li>Los mensajes que pasan por la cuenta de WhatsApp que conectes, para responder y para que tú los puedas ver.</li>
+  <li>Tu correo, para iniciar sesión.</li>
+</ul>
+<p>No vendemos tus datos. Conecta solo un número dedicado a tu negocio.</p>
+<p>Para borrar tu cuenta y tus datos, escríbenos.</p>
+`)
+
+var termsBody = template.HTML(`
+<p>Chalagente es un servicio en pruebas. Lo usas bajo tu propio riesgo.</p>
+<p>No te garantizamos disponibilidad permanente ni que las respuestas del agente sean siempre correctas. Revisa los mensajes importantes.</p>
+<p>No uses Chalagente para spam, fraude ni actividades ilegales. WhatsApp puede desconectar tu número si lo haces.</p>
+`)
+
+var legalTmpl = template.Must(template.New("legal").Parse(`<!doctype html>
+<html lang="es-MX"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ .Title }} — Chalagente</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>` + sharedStyles + `
+.legal { max-width: 680px; margin: 3rem auto; padding: 0 1.5rem; }
+.legal h1 { font-size: clamp(2rem, 4vw, 2.8rem); margin-bottom: 1rem; }
+.legal p, .legal li { color: var(--ink-soft); }
+.legal ul { padding-left: 1.2rem; }
+</style></head><body>
+<header class="nav"><div class="container nav-inner">
+  <a class="logo" href="/"><span class="logo-mark">C</span><span>Chalagente</span></a>
+  <nav class="nav-links"><a href="/demo">Demo</a><a href="/signup">Iniciar sesión</a></nav>
+</div></header>
+<main class="legal">
+  <h1>{{ .Title }}</h1>
+  {{ .Body }}
+</main>
+<footer><div class="container">
+  <span>© Chalagente</span>
+  <span><a href="/privacidad">Aviso de privacidad</a><a href="/terminos">Términos</a></span>
+</div></footer>
+</body></html>`))

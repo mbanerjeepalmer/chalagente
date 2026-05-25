@@ -15,6 +15,7 @@ import (
 	"github.com/mbanerjeepalmer/chalagente/internal/voice"
 	"github.com/mbanerjeepalmer/chalagente/internal/wamanager"
 
+	"github.com/joho/godotenv"
 	_ "github.com/mattn/go-sqlite3"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
@@ -22,6 +23,10 @@ import (
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
+		log.Printf(".env: %v", err)
+	}
+
 	dbPath := getenv("DB_PATH", "./data/app.db")
 	httpAddr := getenv("HTTP_ADDR", ":8080")
 	baseURL := getenv("BASE_URL", "http://localhost:8080")
