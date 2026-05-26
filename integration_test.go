@@ -367,6 +367,94 @@ func TestShareRedirectAndPrefill(t *testing.T) {
 	}
 }
 
+func TestShareRedirectPicksTranslationFromAcceptLanguage(t *testing.T) {
+	a := newTestApp(t)
+	// Inject a deterministic translator so we don't hit the LLM.
+	a.Translator = func(_ context.Context, source string, langs []string) (map[string]string, error) {
+		out := map[string]string{}
+		for _, l := range langs {
+			out[l] = "[" + l + "] " + source
+		}
+		return out, nil
+	}
+	srv := httptest.NewServer(a.Mux())
+	defer srv.Close()
+	a.BaseURL = srv.URL
+
+	jar, _ := cookiejar.New(nil)
+	signInAs(t, a, jar, srv, "clerk-i18n")
+	u, _ := a.Store.GetUserByEmail(context.Background(), "clerk-i18n@example.com")
+	biz, _ := a.Store.CreateBusiness(context.Background(), u.ID)
+	biz.Name = "Café del Sol"
+	biz.WADeviceJID = "5215555555555:1@s.whatsapp.net"
+	biz.TriggerRequired = false
+	if err := a.Store.UpdateBusiness(context.Background(), biz); err != nil {
+		t.Fatalf("UpdateBusiness: %v", err)
+	}
+
+	// Drive translations via the normal save path: POST /app/business with a
+	// changed wa_prefill_template triggers refreshPrefillTranslations.
+	client := &http.Client{Jar: jar}
+	form := url.Values{
+		"name":                []string{"Café del Sol"},
+		"address":             []string{""},
+		"phone":               []string{""},
+		"website":             []string{""},
+		"hours":               []string{""},
+		"extra":               []string{""},
+		"wa_prefill_template": []string{"Hi, help me at {business}"},
+	}
+	res, err := client.PostForm(srv.URL+"/app/business", form)
+	if err != nil {
+		t.Fatalf("POST business: %v", err)
+	}
+	res.Body.Close()
+
+	stored, err := a.Store.GetBusinessByUserID(context.Background(), u.ID)
+	if err != nil {
+		t.Fatalf("GetBusinessByUserID: %v", err)
+	}
+	if got := stored.WAPrefillTranslations["es"]; got == "" {
+		t.Fatalf("expected es translation stored; got %v", stored.WAPrefillTranslations)
+	}
+
+	noRedirect := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	hit := func(acceptLang string) string {
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/go/"+biz.ID, nil)
+		if acceptLang != "" {
+			req.Header.Set("Accept-Language", acceptLang)
+		}
+		res, err := noRedirect.Do(req)
+		if err != nil {
+			t.Fatalf("GET /go: %v", err)
+		}
+		res.Body.Close()
+		loc := res.Header.Get("Location")
+		text := loc[strings.Index(loc, "?text=")+len("?text="):]
+		decoded, _ := url.QueryUnescape(text)
+		return decoded
+	}
+
+	// pt-BR maps to pt by primary subtag.
+	if got := hit("pt-BR,en;q=0.8"); !strings.HasPrefix(got, "[pt] Hi, help me at") {
+		t.Errorf("pt-BR should serve pt translation, got: %q", got)
+	}
+	// es is in the stored set.
+	if got := hit("es-MX,es;q=0.9"); !strings.HasPrefix(got, "[es] Hi, help me at") {
+		t.Errorf("es-MX should serve es translation, got: %q", got)
+	}
+	// Unknown language → fall back to source template.
+	if got := hit("xx-YY"); !strings.Contains(got, "Hi, help me at Café del Sol") || strings.HasPrefix(got, "[") {
+		t.Errorf("unknown lang should fall back to source, got: %q", got)
+	}
+	// Higher-q wins.
+	if got := hit("en;q=0.1,fr;q=0.9"); !strings.HasPrefix(got, "[fr]") {
+		t.Errorf("higher-q fr should win over en, got: %q", got)
+	}
+}
+
 func TestConversationHistoryViewer(t *testing.T) {
 	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())

@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,11 +33,94 @@ func resolvePrefill(b store.Business) string {
 	if tpl == "" {
 		tpl = defaultPrefillTemplate
 	}
+	return finalisePrefill(b, tpl)
+}
+
+// resolvePrefillForLang picks the translation that best matches lang from
+// the business's stored translations map, then runs it through the same
+// {business} substitution + keyword-injection as resolvePrefill. Returns
+// the source-language prefill if no usable translation is found.
+func resolvePrefillForLang(b store.Business, lang string) string {
+	if t := pickTranslation(b.WAPrefillTranslations, lang); t != "" {
+		return finalisePrefill(b, t)
+	}
+	return resolvePrefill(b)
+}
+
+// finalisePrefill substitutes {business} and prepends the trigger keyword
+// when gating is on. Shared between the source-language and translated
+// branches so the keyword rule applies uniformly.
+func finalisePrefill(b store.Business, tpl string) string {
 	out := strings.ReplaceAll(tpl, "{business}", b.Name)
 	if b.TriggerRequired && !strings.Contains(strings.ToLower(out), triggerKeyword) {
 		out = "Chalagente, " + out
 	}
 	return out
+}
+
+// pickTranslation walks the Accept-Language header (or a bare language tag)
+// in priority order and returns the first stored translation whose primary
+// subtag matches. Returns empty string when no entry matches; the caller is
+// expected to fall back to the source template.
+func pickTranslation(translations map[string]string, acceptLang string) string {
+	if len(translations) == 0 || acceptLang == "" {
+		return ""
+	}
+	for _, tag := range parseAcceptLanguage(acceptLang) {
+		if v, ok := translations[tag]; ok && v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// parseAcceptLanguage extracts language primary-subtags from a header value
+// in q-weighted order. "es-MX,es;q=0.9,en;q=0.8" → ["es", "en"].
+// Bare language codes (e.g. "fr") work too.
+func parseAcceptLanguage(header string) []string {
+	type weighted struct {
+		tag string
+		q   float64
+	}
+	var out []weighted
+	seen := map[string]bool{}
+	for _, part := range strings.Split(header, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		tag := part
+		q := 1.0
+		if i := strings.Index(part, ";"); i >= 0 {
+			tag = strings.TrimSpace(part[:i])
+			rest := part[i+1:]
+			if eq := strings.Index(rest, "q="); eq >= 0 {
+				if f, err := strconv.ParseFloat(strings.TrimSpace(rest[eq+2:]), 64); err == nil {
+					q = f
+				}
+			}
+		}
+		if dash := strings.Index(tag, "-"); dash > 0 {
+			tag = tag[:dash]
+		}
+		tag = strings.ToLower(tag)
+		if tag == "" || tag == "*" || seen[tag] {
+			continue
+		}
+		seen[tag] = true
+		out = append(out, weighted{tag: tag, q: q})
+	}
+	// Stable sort by q desc — keeps original order for ties.
+	for i := 1; i < len(out); i++ {
+		for j := i; j > 0 && out[j-1].q < out[j].q; j-- {
+			out[j-1], out[j] = out[j], out[j-1]
+		}
+	}
+	tags := make([]string, len(out))
+	for i, w := range out {
+		tags[i] = w.tag
+	}
+	return tags
 }
 
 // businessShareURL is the canonical link a business hands out — a
@@ -50,14 +135,16 @@ func (a *App) businessShareURL(b store.Business) string {
 	return fmt.Sprintf("%s/go/%s", base, b.ID)
 }
 
-// businessShareTarget builds the wa.me URL we'll 302 the customer to. It's
-// also used to render the dashboard's "wa.me link" preview.
-func businessShareTarget(b store.Business) string {
+// businessShareTarget builds the wa.me URL we'll 302 the customer to. When
+// acceptLang is set we serve the matching translation from
+// b.WAPrefillTranslations; otherwise we fall back to the source-language
+// template.
+func businessShareTarget(b store.Business, acceptLang string) string {
 	phone := phoneFromJID(b.WADeviceJID)
 	if phone == "" {
 		return ""
 	}
-	text := resolvePrefill(b)
+	text := resolvePrefillForLang(b, acceptLang)
 	if text == "" {
 		return fmt.Sprintf("https://wa.me/%s", phone)
 	}
@@ -119,7 +206,7 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	status := waStatusFor(a, b.ID)
 	data := dashData{
 		Business:        b,
-		WAMeURL:         businessShareTarget(b),
+		WAMeURL:         businessShareTarget(b, ""),
 		ShareURL:        a.businessShareURL(b),
 		PrefillResolved: resolvePrefill(b),
 		Connected:       status.Connected,
@@ -135,6 +222,32 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	if err := dashTmpl.Execute(w, data); err != nil {
 		log.Printf("dashTmpl: %v", err)
 	}
+}
+
+// prefillInputChanged returns true when the inputs that affect the cached
+// translation set changed — the source-language template, the business
+// name (which is substituted into {business} in the LLM prompt) or the
+// trigger-required flag (which decides whether to ask the model to fold
+// the keyword into the source string).
+func prefillInputChanged(prev, next store.Business) bool {
+	return prev.WAPrefillTemplate != next.WAPrefillTemplate ||
+		prev.Name != next.Name ||
+		prev.TriggerRequired != next.TriggerRequired
+}
+
+// refreshPrefillTranslations asks the configured Translator for fresh
+// translations of the current source-language prefill (after {business}
+// substitution and any keyword injection). Returns nil + nil when no
+// translator is configured — the caller keeps the existing translations.
+func (a *App) refreshPrefillTranslations(ctx context.Context, b store.Business) (map[string]string, error) {
+	if a.Translator == nil {
+		return nil, nil
+	}
+	source := resolvePrefill(b)
+	if strings.TrimSpace(source) == "" {
+		return map[string]string{}, nil
+	}
+	return a.Translator(ctx, source, supportedPrefillLangs)
 }
 
 // handleShareRedirect is the public /go/{id} endpoint. It looks up the
@@ -153,11 +266,14 @@ func (a *App) handleShareRedirect(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	target := businessShareTarget(b)
+	target := businessShareTarget(b, r.Header.Get("Accept-Language"))
 	if target == "" {
 		http.NotFound(w, r)
 		return
 	}
+	// Vary on Accept-Language so any cache (CDN, browser) treats different
+	// browser locales as separate responses.
+	w.Header().Set("Vary", "Accept-Language")
 	w.Header().Set("Cache-Control", "no-store")
 	http.Redirect(w, r, target, http.StatusFound)
 }
@@ -286,7 +402,15 @@ func (a *App) handleDashboardTriggerToggle(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "bad form", http.StatusBadRequest)
 		return
 	}
+	prev := b
 	b.TriggerRequired = r.PostForm.Get("required") == "1"
+	if prefillInputChanged(prev, b) {
+		if newT, err := a.refreshPrefillTranslations(r.Context(), b); err != nil {
+			log.Printf("prefill: refresh translations on keyword toggle: %v", err)
+		} else if newT != nil {
+			b.WAPrefillTranslations = newT
+		}
+	}
 	if err := a.Store.UpdateBusiness(r.Context(), b); err != nil {
 		http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -308,6 +432,7 @@ func (a *App) handleDashboardBusiness(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "bad form", http.StatusBadRequest)
 			return
 		}
+		prev := b
 		b.Name = strings.TrimSpace(r.PostForm.Get("name"))
 		b.Address = strings.TrimSpace(r.PostForm.Get("address"))
 		b.Phone = strings.TrimSpace(r.PostForm.Get("phone"))
@@ -315,6 +440,18 @@ func (a *App) handleDashboardBusiness(w http.ResponseWriter, r *http.Request) {
 		b.Hours = strings.TrimSpace(r.PostForm.Get("hours"))
 		b.ExtraInfo = strings.TrimSpace(r.PostForm.Get("extra"))
 		b.WAPrefillTemplate = strings.TrimSpace(r.PostForm.Get("wa_prefill_template"))
+		// Regenerate cached translations when the source-language template,
+		// the business name (used in the {business} placeholder) or the
+		// keyword setting changes. Failures are non-fatal — we keep the
+		// previous translations so a transient LLM hiccup doesn't wipe
+		// good data.
+		if prefillInputChanged(prev, b) {
+			if newT, err := a.refreshPrefillTranslations(r.Context(), b); err != nil {
+				log.Printf("prefill: refresh translations: %v", err)
+			} else if newT != nil {
+				b.WAPrefillTranslations = newT
+			}
+		}
 		if err := a.Store.UpdateBusiness(r.Context(), b); err != nil {
 			http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
 			return
