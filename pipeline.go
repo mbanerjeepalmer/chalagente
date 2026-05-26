@@ -103,7 +103,21 @@ func (a *App) processIncoming(businessID string, msg *events.Message) {
 		Business: bc,
 	}
 	if kind != "text" {
-		req.Incoming.Attachments = []agent.Attachment{{Kind: kind, Ref: msg.Info.ID}}
+		att := agent.Attachment{Kind: kind, Ref: msg.Info.ID}
+		if kind == "image" {
+			if im := msg.Message.GetImageMessage(); im != nil {
+				if client, ok := a.WAMgr.Client(businessID); ok {
+					data, derr := client.Download(ctx, im)
+					if derr == nil {
+						att.Bytes = data
+						att.MimeType = im.GetMimetype()
+					} else {
+						log.Printf("pipeline: download image %s: %v", msg.Info.ID, derr)
+					}
+				}
+			}
+		}
+		req.Incoming.Attachments = []agent.Attachment{att}
 	}
 
 	reply, err := a.Agent.Respond(ctx, req)
