@@ -9,7 +9,6 @@ import (
 	"syscall"
 
 	"github.com/mbanerjeepalmer/chalagente/internal/agent"
-	"github.com/mbanerjeepalmer/chalagente/internal/auth"
 	"github.com/mbanerjeepalmer/chalagente/internal/clerkauth"
 	"github.com/mbanerjeepalmer/chalagente/internal/maps"
 	"github.com/mbanerjeepalmer/chalagente/internal/store"
@@ -64,26 +63,20 @@ func main() {
 	app.Maps = maps.DefaultMockClient()
 	app.BaseURL = baseURL
 	cookieSecure := getenv("COOKIE_SECURE", "false") == "true"
-	if secret := os.Getenv("CLERK_SECRET_KEY"); secret != "" {
-		app.ClerkAuth = &clerkauth.Handlers{
-			SecretKey:      secret,
-			PublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
-			FrontendAPI:    os.Getenv("CLERK_FRONTEND_API"),
-			AfterSignInURL: getenv("CLERK_AFTER_SIGN_IN_URL", "/onboarding"),
-			Store:          &storeClerkAdapter{s: appStore},
-			CookieSecure:   cookieSecure,
-		}
-		app.ClerkAuth.Init()
-		log.Printf("auth: Clerk enabled (frontend_api=%s)", app.ClerkAuth.FrontendAPI)
-	} else {
-		app.Auth = &auth.Handlers{
-			Store:        &storeAuthAdapter{s: appStore},
-			Mailer:       auth.ConsoleMailer{Logf: log.Printf},
-			BaseURL:      baseURL,
-			CookieSecure: cookieSecure,
-		}
-		log.Printf("auth: magic-link (set CLERK_SECRET_KEY to enable Clerk)")
+	secret := os.Getenv("CLERK_SECRET_KEY")
+	if secret == "" {
+		log.Fatalf("auth: CLERK_SECRET_KEY is required (Clerk is the only auth provider)")
 	}
+	app.ClerkAuth = &clerkauth.Handlers{
+		SecretKey:      secret,
+		PublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
+		FrontendAPI:    os.Getenv("CLERK_FRONTEND_API"),
+		AfterSignInURL: getenv("CLERK_AFTER_SIGN_IN_URL", "/onboarding"),
+		Store:          &storeClerkAdapter{s: appStore},
+		CookieSecure:   cookieSecure,
+	}
+	app.ClerkAuth.Init()
+	log.Printf("auth: Clerk enabled (frontend_api=%s)", app.ClerkAuth.FrontendAPI)
 
 	wam.SetEventHandler(app.handleWAEvent)
 

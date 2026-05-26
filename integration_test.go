@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -11,38 +12,67 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
+	"github.com/clerk/clerk-sdk-go/v2"
 	"github.com/mbanerjeepalmer/chalagente/internal/agent"
-	"github.com/mbanerjeepalmer/chalagente/internal/auth"
+	"github.com/mbanerjeepalmer/chalagente/internal/clerkauth"
 	"github.com/mbanerjeepalmer/chalagente/internal/maps"
 	"github.com/mbanerjeepalmer/chalagente/internal/store"
 	"github.com/mbanerjeepalmer/chalagente/internal/voice"
 	"github.com/mbanerjeepalmer/chalagente/internal/wamanager"
 )
 
-type captureMailer struct {
-	mu    sync.Mutex
-	email string
-	url   string
+// testClerkAuth builds a clerkauth.Handlers wired to the given store with a
+// stubbed Verify hook that accepts any non-empty token and treats it as the
+// Clerk subject. Combined with the test Resolver below, this lets tests
+// pose as any Clerk user just by setting the session cookie to a chosen
+// clerkID value.
+func testClerkAuth(s *store.Store) *clerkauth.Handlers {
+	h := &clerkauth.Handlers{
+		Store:        &storeClerkAdapter{s: s},
+		Resolver:     &testResolver{},
+		CookieSecure: false,
+		Verify: func(_ context.Context, token string) (*clerk.SessionClaims, error) {
+			if token == "" {
+				return nil, errors.New("no token")
+			}
+			c := &clerk.SessionClaims{}
+			c.Subject = token
+			return c, nil
+		},
+	}
+	h.Init()
+	return h
 }
 
-func (m *captureMailer) SendMagicLink(_ context.Context, email, link string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.email = email
-	m.url = link
-	return nil
+// testResolver maps clerkID → "<clerkID>@example.com" so each test subject
+// produces a deterministic email.
+type testResolver struct{}
+
+func (testResolver) Email(_ context.Context, clerkID string) (string, error) {
+	return clerkID + "@example.com", nil
 }
 
-func (m *captureMailer) lastURL() string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.url
+// signInAs gives client a session cookie for the supplied Clerk subject and
+// also pre-creates the local user, returning the local user ID. The cookie
+// is set on srv.URL so the test's http.Client picks it up automatically.
+func signInAs(t *testing.T, a *App, jar http.CookieJar, srv *httptest.Server, clerkID string) string {
+	t.Helper()
+	u, err := a.Store.EnsureUserByClerk(context.Background(), clerkID, clerkID+"@example.com")
+	if err != nil {
+		t.Fatalf("EnsureUserByClerk: %v", err)
+	}
+	srvURL, _ := url.Parse(srv.URL)
+	jar.SetCookies(srvURL, []*http.Cookie{{
+		Name:  clerkauth.SessionCookieName,
+		Value: clerkID,
+		Path:  "/",
+	}})
+	return u.ID
 }
 
-func newTestApp(t *testing.T) (*App, *captureMailer) {
+func newTestApp(t *testing.T) *App {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "app.db")
 	s, err := store.Open(dbPath)
@@ -51,7 +81,6 @@ func newTestApp(t *testing.T) (*App, *captureMailer) {
 	}
 	t.Cleanup(func() { _ = s.Close() })
 
-	mail := &captureMailer{}
 	a := newApp()
 	a.Store = s
 	a.Agent = agent.NewMockEngine()
@@ -59,17 +88,12 @@ func newTestApp(t *testing.T) (*App, *captureMailer) {
 	a.Maps = maps.DefaultMockClient()
 	a.BaseURL = "http://127.0.0.1"
 	a.WAMgr = wamanager.New(nil, nil)
-	a.Auth = &auth.Handlers{
-		Store:        &storeAuthAdapter{s: s},
-		Mailer:       mail,
-		BaseURL:      a.BaseURL,
-		CookieSecure: false,
-	}
-	return a, mail
+	a.ClerkAuth = testClerkAuth(s)
+	return a
 }
 
-func TestLandingPageHasSignupCTA(t *testing.T) {
-	a, _ := newTestApp(t)
+func TestLandingPageHasSignInCTA(t *testing.T) {
+	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
 	defer srv.Close()
 
@@ -82,13 +106,13 @@ func TestLandingPageHasSignupCTA(t *testing.T) {
 	if res.StatusCode != 200 {
 		t.Fatalf("status: %d", res.StatusCode)
 	}
-	if !strings.Contains(string(body), "/signup") {
-		t.Fatalf("landing missing /signup CTA")
+	if !strings.Contains(string(body), "/sign-in") {
+		t.Fatalf("landing missing /sign-in CTA")
 	}
 }
 
 func TestHealthCheck(t *testing.T) {
-	a, _ := newTestApp(t)
+	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
 	defer srv.Close()
 
@@ -102,8 +126,8 @@ func TestHealthCheck(t *testing.T) {
 	}
 }
 
-func TestUnauthenticatedRedirectsToSignup(t *testing.T) {
-	a, _ := newTestApp(t)
+func TestUnauthenticatedRedirectsToSignIn(t *testing.T) {
+	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
 	defer srv.Close()
 
@@ -119,84 +143,44 @@ func TestUnauthenticatedRedirectsToSignup(t *testing.T) {
 		t.Fatalf("expected redirect, got %d", res.StatusCode)
 	}
 	loc := res.Header.Get("Location")
-	if !strings.Contains(loc, "/signup") {
-		t.Fatalf("redirect to %q, want /signup", loc)
+	if !strings.Contains(loc, "/sign-in") {
+		t.Fatalf("redirect to %q, want /sign-in", loc)
 	}
 }
 
-func TestSignupFlowEndToEnd(t *testing.T) {
-	a, mail := newTestApp(t)
+func TestSignedInUserCanReachOnboarding(t *testing.T) {
+	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
 	defer srv.Close()
-	a.Auth.BaseURL = srv.URL
-
 	jar, _ := cookiejar.New(nil)
+	signInAs(t, a, jar, srv, "clerk-onboarding")
+
 	client := &http.Client{Jar: jar}
-
-	res, err := client.PostForm(srv.URL+"/signup", url.Values{"email": []string{"hola@example.com"}})
+	res, err := client.Get(srv.URL + "/onboarding")
 	if err != nil {
-		t.Fatalf("POST /signup: %v", err)
-	}
-	res.Body.Close()
-	if res.StatusCode != 200 {
-		t.Fatalf("signup status: %d", res.StatusCode)
-	}
-
-	link := mail.lastURL()
-	if link == "" {
-		t.Fatal("mailer did not receive a link")
-	}
-
-	res, err = client.Get(link)
-	if err != nil {
-		t.Fatalf("verify GET: %v", err)
+		t.Fatalf("GET /onboarding: %v", err)
 	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
-		t.Fatalf("verify final status: %d (last URL %s)", res.StatusCode, res.Request.URL)
+		t.Fatalf("onboarding status: %d", res.StatusCode)
 	}
 	body, _ := io.ReadAll(res.Body)
 	if !strings.Contains(string(body), "Paso 1") {
-		t.Fatalf("expected onboarding step 1; final URL %s; body starts: %s",
-			res.Request.URL, first(string(body), 200))
+		t.Fatalf("expected onboarding step 1; body starts: %s", first(string(body), 200))
 	}
-
-	u, _ := url.Parse(srv.URL)
-	cookies := jar.Cookies(u)
-	var hasSess bool
-	for _, c := range cookies {
-		if c.Name == auth.CookieName {
-			hasSess = true
-		}
-	}
-	if !hasSess {
-		t.Fatal("missing session cookie after verify")
-	}
-
-	// Sanity: the user actually got created in the store.
-	if _, err := a.Store.GetUserByEmail(context.Background(), "hola@example.com"); err != nil {
+	if _, err := a.Store.GetUserByEmail(context.Background(), "clerk-onboarding@example.com"); err != nil {
 		t.Fatalf("user not created: %v", err)
 	}
 }
 
 func TestOnboardingBusinessSavesBusiness(t *testing.T) {
-	a, mail := newTestApp(t)
+	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
 	defer srv.Close()
-	a.Auth.BaseURL = srv.URL
-
 	jar, _ := cookiejar.New(nil)
+	signInAs(t, a, jar, srv, "clerk-biz")
+
 	client := &http.Client{Jar: jar}
-
-	if _, err := client.PostForm(srv.URL+"/signup", url.Values{"email": []string{"a@b.com"}}); err != nil {
-		t.Fatalf("signup: %v", err)
-	}
-	res, err := client.Get(mail.lastURL())
-	if err != nil {
-		t.Fatalf("verify: %v", err)
-	}
-	res.Body.Close()
-
 	form := url.Values{
 		"action":  []string{"save"},
 		"name":    []string{"Café Pruebas"},
@@ -204,13 +188,13 @@ func TestOnboardingBusinessSavesBusiness(t *testing.T) {
 		"phone":   []string{"+52 55 1234 5678"},
 		"hours":   []string{"Lun-Vie 9-18"},
 	}
-	res, err = client.PostForm(srv.URL+"/onboarding/business", form)
+	res, err := client.PostForm(srv.URL+"/onboarding/business", form)
 	if err != nil {
 		t.Fatalf("POST business: %v", err)
 	}
 	res.Body.Close()
 
-	u, err := a.Store.GetUserByEmail(context.Background(), "a@b.com")
+	u, err := a.Store.GetUserByEmail(context.Background(), "clerk-biz@example.com")
 	if err != nil {
 		t.Fatalf("GetUserByEmail: %v", err)
 	}
@@ -227,25 +211,15 @@ func TestOnboardingBusinessSavesBusiness(t *testing.T) {
 }
 
 func TestMapsSearchInOnboarding(t *testing.T) {
-	a, mail := newTestApp(t)
+	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
 	defer srv.Close()
-	a.Auth.BaseURL = srv.URL
-
 	jar, _ := cookiejar.New(nil)
+	signInAs(t, a, jar, srv, "clerk-maps")
+
 	client := &http.Client{Jar: jar}
-
-	if _, err := client.PostForm(srv.URL+"/signup", url.Values{"email": []string{"x@y.com"}}); err != nil {
-		t.Fatalf("signup: %v", err)
-	}
-	res, err := client.Get(mail.lastURL())
-	if err != nil {
-		t.Fatalf("verify: %v", err)
-	}
-	res.Body.Close()
-
 	form := url.Values{"action": []string{"search"}, "q": []string{"taqueria"}}
-	res, err = client.PostForm(srv.URL+"/onboarding/business", form)
+	res, err := client.PostForm(srv.URL+"/onboarding/business", form)
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
@@ -257,30 +231,21 @@ func TestMapsSearchInOnboarding(t *testing.T) {
 }
 
 func TestUnpairWhatsAppClearsDeviceJID(t *testing.T) {
-	a, mail := newTestApp(t)
+	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
 	defer srv.Close()
-	a.Auth.BaseURL = srv.URL
-
 	jar, _ := cookiejar.New(nil)
+	signInAs(t, a, jar, srv, "clerk-unpair")
+
 	client := &http.Client{Jar: jar}
 
-	if _, err := client.PostForm(srv.URL+"/signup", url.Values{"email": []string{"u@x.com"}}); err != nil {
-		t.Fatalf("signup: %v", err)
-	}
-	res, err := client.Get(mail.lastURL())
-	if err != nil {
-		t.Fatalf("verify: %v", err)
-	}
-	res.Body.Close()
-
-	u, err := a.Store.GetUserByEmail(context.Background(), "u@x.com")
+	u, err := a.Store.GetUserByEmail(context.Background(), "clerk-unpair@example.com")
 	if err != nil {
 		t.Fatalf("GetUserByEmail: %v", err)
 	}
-	biz, err := a.Store.GetBusinessByUserID(context.Background(), u.ID)
+	biz, err := a.Store.CreateBusiness(context.Background(), u.ID)
 	if err != nil {
-		t.Fatalf("GetBusinessByUserID: %v", err)
+		t.Fatalf("CreateBusiness: %v", err)
 	}
 	biz.Name = "Café X"
 	biz.WADeviceJID = "447700900123:1@s.whatsapp.net"
@@ -288,7 +253,7 @@ func TestUnpairWhatsAppClearsDeviceJID(t *testing.T) {
 		t.Fatalf("UpdateBusiness: %v", err)
 	}
 
-	res, err = client.PostForm(srv.URL+"/app/whatsapp/unpair", url.Values{})
+	res, err := client.PostForm(srv.URL+"/app/whatsapp/unpair", url.Values{})
 	if err != nil {
 		t.Fatalf("POST unpair: %v", err)
 	}
@@ -307,10 +272,9 @@ func TestUnpairWhatsAppClearsDeviceJID(t *testing.T) {
 }
 
 func TestTriggerKeywordExplained(t *testing.T) {
-	a, mail := newTestApp(t)
+	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
 	defer srv.Close()
-	a.Auth.BaseURL = srv.URL
 
 	// Landing page — public, no auth.
 	{
@@ -325,25 +289,17 @@ func TestTriggerKeywordExplained(t *testing.T) {
 		}
 	}
 
-	// Set up an authed session with a paired business so we can hit /app
-	// and /onboarding/test.
 	jar, _ := cookiejar.New(nil)
+	signInAs(t, a, jar, srv, "clerk-trig")
 	client := &http.Client{Jar: jar}
-	if _, err := client.PostForm(srv.URL+"/signup", url.Values{"email": []string{"trig@x.com"}}); err != nil {
-		t.Fatalf("signup: %v", err)
-	}
-	if res, err := client.Get(mail.lastURL()); err != nil {
-		t.Fatalf("verify: %v", err)
-	} else {
-		res.Body.Close()
-	}
-	u, err := a.Store.GetUserByEmail(context.Background(), "trig@x.com")
+
+	u, err := a.Store.GetUserByEmail(context.Background(), "clerk-trig@example.com")
 	if err != nil {
 		t.Fatalf("GetUserByEmail: %v", err)
 	}
-	biz, err := a.Store.GetBusinessByUserID(context.Background(), u.ID)
+	biz, err := a.Store.CreateBusiness(context.Background(), u.ID)
 	if err != nil {
-		t.Fatalf("GetBusinessByUserID: %v", err)
+		t.Fatalf("CreateBusiness: %v", err)
 	}
 	biz.Name = "Café Trigger"
 	biz.WADeviceJID = "5215512345678:1@s.whatsapp.net"

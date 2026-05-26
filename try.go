@@ -384,8 +384,8 @@ audio{width:100%;margin-top:.25rem;height:32px}
 <div class="topbar">
  <a class="logo" href="/"><span class="logo-mark">C</span><span>Chalagente</span></a>
  <div style="display:flex;gap:.6rem;align-items:center">
-  <a href="/signup" style="font-size:.92rem">Iniciar sesión</a>
-  <a class="btn" href="/signup">Crear cuenta →</a>
+  <a href="/sign-in" style="font-size:.92rem">Iniciar sesión</a>
+  <a class="btn" href="/sign-up">Crear cuenta →</a>
  </div>
 </div>
 <div class="banner">
@@ -424,7 +424,7 @@ audio{width:100%;margin-top:.25rem;height:32px}
   </form>
   <div class="cta-footer" id="ctaFoot">
    <span>¿Te gusta cómo responde?</span>
-   <a href="/signup">Conecta tu WhatsApp →</a>
+   <a href="/sign-up">Conecta tu WhatsApp →</a>
   </div>
  </div>
 </div>

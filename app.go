@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/mbanerjeepalmer/chalagente/internal/agent"
-	"github.com/mbanerjeepalmer/chalagente/internal/auth"
 	"github.com/mbanerjeepalmer/chalagente/internal/clerkauth"
 	"github.com/mbanerjeepalmer/chalagente/internal/maps"
 	"github.com/mbanerjeepalmer/chalagente/internal/store"
@@ -16,12 +15,11 @@ import (
 )
 
 type App struct {
-	Store    *store.Store
-	WAMgr    *wamanager.Manager
-	Agent    agent.Engine
-	Voice    voice.Provider
-	Maps     maps.Client
-	Auth      *auth.Handlers
+	Store     *store.Store
+	WAMgr     *wamanager.Manager
+	Agent     agent.Engine
+	Voice     voice.Provider
+	Maps      maps.Client
 	ClerkAuth *clerkauth.Handlers
 	BaseURL   string
 
@@ -54,37 +52,18 @@ type pairSession struct {
 	cancel    context.CancelFunc
 }
 
-// userIDFrom returns the authenticated local user id from the request
-// context, regardless of which auth provider populated it.
+// userIDFrom returns the authenticated local user id injected by the
+// Clerk middleware.
 func (a *App) userIDFrom(r *http.Request) (string, bool) {
-	if a.ClerkAuth != nil {
-		if id, ok := a.ClerkAuth.UserIDFrom(r.Context()); ok {
-			return id, true
-		}
-	}
-	if a.Auth != nil {
-		if id, ok := a.Auth.UserIDFrom(r.Context()); ok {
-			return id, true
-		}
-	}
-	return "", false
+	return a.ClerkAuth.UserIDFrom(r.Context())
 }
 
 // signInPath returns the URL path to redirect unauthenticated users to.
-func (a *App) signInPath() string {
-	if a.ClerkAuth != nil {
-		return "/sign-in"
-	}
-	return "/signup"
-}
+func (a *App) signInPath() string { return "/sign-in" }
 
-// authMiddleware returns the active auth middleware. Panics if neither
-// auth provider is configured (only happens in misconfigured runtime).
+// authMiddleware returns the Clerk auth middleware. ClerkAuth must be set.
 func (a *App) authMiddleware(next http.Handler) http.Handler {
-	if a.ClerkAuth != nil {
-		return a.ClerkAuth.Middleware(next)
-	}
-	return a.Auth.Middleware(next)
+	return a.ClerkAuth.Middleware(next)
 }
 
 func newApp() *App {
