@@ -25,6 +25,7 @@ type dashData struct {
 }
 
 type convoRow struct {
+	ID          string
 	CustomerJID string
 	UpdatedAt   time.Time
 	LastBody    string
@@ -54,6 +55,7 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request) {
 			lastDir = msgs[0].Direction
 		}
 		rows = append(rows, convoRow{
+			ID:          c.ID,
 			CustomerJID: c.CustomerJID,
 			UpdatedAt:   c.UpdatedAt,
 			LastBody:    lastBody,
@@ -113,6 +115,86 @@ func (a *App) handleDashboardAgentToggle(w http.ResponseWriter, r *http.Request)
 		state = "apagado"
 	}
 	http.Redirect(w, r, "/app?flash=Agente+"+state, http.StatusSeeOther)
+}
+
+// historyMaxMessages caps the read-only conversation viewer. Real chats run
+// to thousands of messages over time; this keeps the page light and the SSR
+// quick. Future pagination would lift this number — for now it's a single
+// big window so the viewer matches the "Full history" expectation in the
+// refining notes.
+const historyMaxMessages = 2000
+
+type historyMessage struct {
+	Direction string
+	Kind      string
+	Body      string
+	Time      time.Time
+}
+
+type historyView struct {
+	Business    store.Business
+	CustomerJID string
+	Messages    []historyMessage
+	Total       int
+	Truncated   bool
+}
+
+// handleDashboardConversation renders the full read-only message history for
+// one conversation. The conversation id comes from the URL path; we verify
+// it belongs to the calling user's business before showing anything.
+func (a *App) handleDashboardConversation(w http.ResponseWriter, r *http.Request) {
+	b, ok := a.requireBusiness(w, r)
+	if !ok {
+		return
+	}
+	convoID := r.PathValue("id")
+	if convoID == "" {
+		http.Error(w, "missing conversation id", http.StatusBadRequest)
+		return
+	}
+	convo, err := a.Store.GetConversation(r.Context(), convoID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "get conversation: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if convo.BusinessID != b.ID {
+		http.NotFound(w, r)
+		return
+	}
+
+	raw, err := a.Store.ListMessages(r.Context(), convo.ID, historyMaxMessages)
+	if err != nil {
+		http.Error(w, "list messages: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// ListMessages is newest-first; reverse so the viewer reads top-down
+	// like a regular WhatsApp chat.
+	msgs := make([]historyMessage, 0, len(raw))
+	for i := len(raw) - 1; i >= 0; i-- {
+		m := raw[i]
+		msgs = append(msgs, historyMessage{
+			Direction: m.Direction,
+			Kind:      m.Kind,
+			Body:      m.Body,
+			Time:      m.CreatedAt,
+		})
+	}
+
+	view := historyView{
+		Business:    b,
+		CustomerJID: convo.CustomerJID,
+		Messages:    msgs,
+		Total:       len(msgs),
+		Truncated:   len(raw) == historyMaxMessages,
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := dashHistoryTmpl.Execute(w, view); err != nil {
+		log.Printf("dashHistoryTmpl: %v", err)
+	}
 }
 
 func (a *App) handleDashboardTriggerToggle(w http.ResponseWriter, r *http.Request) {
@@ -337,9 +419,11 @@ form{display:inline}
     <ul class="convos">
     {{ range .Conversations }}
      <li>
-      <span class="when">{{ .UpdatedAt.Format "15:04" }}</span>
-      <div class="who">{{ .CustomerJID }}</div>
-      <div class="body">{{ if eq .LastDir "out" }}→{{ else }}←{{ end }} {{ .LastBody }}</div>
+      <a href="/app/conversations/{{ .ID }}" style="display:block;color:inherit;text-decoration:none">
+       <span class="when">{{ .UpdatedAt.Format "15:04" }}</span>
+       <div class="who">{{ .CustomerJID }}</div>
+       <div class="body">{{ if eq .LastDir "out" }}→{{ else }}←{{ end }} {{ .LastBody }}</div>
+      </a>
      </li>
     {{ end }}
     </ul>
@@ -400,6 +484,39 @@ async function bootClerkButton() {
 }
 </script>
 {{ end }}
+</body></html>`))
+
+var dashHistoryTmpl = template.Must(template.New("dashHistory").Parse(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>{{ .CustomerJID }} — Chalagente</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:760px;margin:0 auto;padding:1rem;color:#222;line-height:1.5;background:#ece5dd}
+.crumbs{font-size:.85em;margin-bottom:.5rem}
+.crumbs a{color:#075e54;text-decoration:none}
+.crumbs a:hover{text-decoration:underline}
+h1{margin:.2rem 0 .8rem;font-size:1.4rem;color:#075e54}
+.meta{font-size:.85em;color:#555;margin-bottom:.5rem}
+.chat{display:flex;flex-direction:column;gap:.35rem;padding:1rem;background:#ece5dd;border-radius:6px}
+.bubble{max-width:80%;padding:.5rem .7rem;border-radius:10px;font-size:.95rem;color:#222;box-shadow:0 1px 1px rgba(0,0,0,.08);word-wrap:break-word}
+.bubble.in{background:white;align-self:flex-start;border-bottom-left-radius:2px}
+.bubble.out{background:#dcf8c6;align-self:flex-end;border-bottom-right-radius:2px}
+.bubble .when{display:block;color:#888;font-size:.7em;margin-top:.2rem}
+.bubble .kindbadge{display:inline-block;font-size:.7em;color:#555;background:rgba(0,0,0,.05);border-radius:3px;padding:1px 5px;margin-right:.3rem;text-transform:uppercase;letter-spacing:.05em}
+.empty{padding:2rem;text-align:center;color:#666}
+.note{color:#555;font-size:.85em;margin-top:.8rem;text-align:center}
+</style></head><body>
+<div class="crumbs"><a href="/app">← Conversaciones</a></div>
+<h1>{{ .CustomerJID }}</h1>
+<p class="meta">{{ .Total }} mensaje{{ if ne .Total 1 }}s{{ end }} · solo lectura</p>
+<div class="chat">
+{{ range .Messages }}
+ <div class="bubble {{ .Direction }}">
+  {{ if ne .Kind "text" }}<span class="kindbadge">{{ .Kind }}</span>{{ end }}{{ .Body }}
+  <span class="when">{{ .Time.Format "2006-01-02 15:04" }}</span>
+ </div>
+{{ else }}
+ <div class="empty">Aún no hay mensajes en este chat.</div>
+{{ end }}
+</div>
+{{ if .Truncated }}<p class="note">Mostrando los últimos {{ .Total }} mensajes — el historial más antiguo está guardado pero no se muestra aquí.</p>{{ end }}
 </body></html>`))
 
 var dashBusinessTmpl = template.Must(template.New("dashBusiness").Parse(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Información — Chalagente</title>
