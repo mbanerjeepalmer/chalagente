@@ -23,11 +23,13 @@ const (
 
 // Attachment is a non-text payload attached to a Message. Ref is an opaque
 // identifier — a blob URL, a storage key, or whatever the engine implementation
-// knows how to resolve.
+// knows how to resolve. Bytes is the inline binary payload (e.g. a downloaded
+// image); engines that support vision read it directly.
 type Attachment struct {
 	Kind     string // "image" | "audio" | "video"
 	MimeType string
 	Ref      string
+	Bytes    []byte
 }
 
 // Message is a single turn in a conversation.

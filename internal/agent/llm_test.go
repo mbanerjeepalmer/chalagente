@@ -64,6 +64,97 @@ func TestBedrockEngineHitsRightEndpointAndReturnsReply(t *testing.T) {
 	}
 }
 
+func TestBedrockEngineSendsImageContentBlock(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"output":{"message":{"role":"assistant","content":[{"text":"veo un taco"}]}}}`))
+	}))
+	defer srv.Close()
+	e := &BedrockEngine{BaseURL: srv.URL, Token: "x", Model: "m"}
+	imgBytes := []byte{0x89, 0x50, 0x4E, 0x47} // PNG magic prefix is enough — we don't decode here.
+	reply, err := e.Respond(context.Background(), Request{
+		Incoming: Message{
+			Role: RoleUser,
+			Text: "¿qué ves?",
+			Attachments: []Attachment{{
+				Kind:     "image",
+				MimeType: "image/png",
+				Bytes:    imgBytes,
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("respond: %v", err)
+	}
+	if reply.Text != "veo un taco" {
+		t.Fatalf("text: %q", reply.Text)
+	}
+	msgs, ok := gotBody["messages"].([]any)
+	if !ok || len(msgs) != 1 {
+		t.Fatalf("messages shape: %v", gotBody)
+	}
+	content, _ := msgs[0].(map[string]any)["content"].([]any)
+	var sawImage, sawText bool
+	for _, blk := range content {
+		m, _ := blk.(map[string]any)
+		if img, ok := m["image"].(map[string]any); ok {
+			sawImage = true
+			if img["format"] != "png" {
+				t.Errorf("image format = %v want png", img["format"])
+			}
+			if src, _ := img["source"].(map[string]any); src["bytes"] == nil {
+				t.Errorf("missing source.bytes")
+			}
+		}
+		if _, ok := m["text"]; ok {
+			sawText = true
+		}
+	}
+	if !sawImage {
+		t.Errorf("no image content block in payload: %v", content)
+	}
+	if !sawText {
+		t.Errorf("no text content block in payload: %v", content)
+	}
+}
+
+func TestBedrockEngineEmptyCaptionAddsFallbackText(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"output":{"message":{"role":"assistant","content":[{"text":"ok"}]}}}`))
+	}))
+	defer srv.Close()
+	e := &BedrockEngine{BaseURL: srv.URL, Token: "x", Model: "m"}
+	_, err := e.Respond(context.Background(), Request{
+		Incoming: Message{
+			Role: RoleUser,
+			Text: "",
+			Attachments: []Attachment{{Kind: "image", MimeType: "image/jpeg", Bytes: []byte{0xff, 0xd8}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("respond: %v", err)
+	}
+	msgs, _ := gotBody["messages"].([]any)
+	content, _ := msgs[0].(map[string]any)["content"].([]any)
+	var textBlock string
+	for _, blk := range content {
+		m, _ := blk.(map[string]any)
+		if t, ok := m["text"].(string); ok {
+			textBlock = t
+		}
+	}
+	if textBlock == "" {
+		t.Fatalf("expected fallback text block when caption empty")
+	}
+}
+
 func TestBedrockEngineSurfacesHTTPErrors(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(401)
