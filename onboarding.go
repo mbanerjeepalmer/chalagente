@@ -337,7 +337,10 @@ func (a *App) handleOnboardingFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.clearPairSession("") // no-op safety
-	http.Redirect(w, r, "/admin", http.StatusSeeOther)
+	// Land on the connection screen so the user lands somewhere actionable —
+	// they've just paired, and the tooltip there nudges them into filling
+	// out business info next.
+	http.Redirect(w, r, "/admin/connection?hint=biz", http.StatusSeeOther)
 }
 
 func waMeURL(jidStr string) string {
