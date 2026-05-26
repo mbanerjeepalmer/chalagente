@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"mime/multipart"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/clerk/clerk-sdk-go/v2"
+	"github.com/coder/websocket"
 	"github.com/mbanerjeepalmer/chalagente/internal/agent"
 
 	"go.mau.fi/whatsmeow"
@@ -649,6 +651,54 @@ func TestOnboardingFinishLandsOnAdminConnection(t *testing.T) {
 	}
 	if !strings.Contains(loc, "hint=biz") {
 		t.Errorf("expected hint=biz in redirect target, got %q", loc)
+	}
+}
+
+func TestDemoLiveTranscribeWS(t *testing.T) {
+	a := newTestApp(t)
+	srv := httptest.NewServer(a.Mux())
+	defer srv.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/demo/transcribe/ws"
+	conn, _, err := websocket.Dial(context.Background(), wsURL, nil)
+	if err != nil {
+		t.Fatalf("ws dial: %v", err)
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	if err := conn.Write(ctx, websocket.MessageBinary, []byte{0x00, 0x10, 0x00, 0x20}); err != nil {
+		t.Fatalf("write audio: %v", err)
+	}
+	// Read the partial event the mock emits per chunk.
+	_, raw, err := conn.Read(ctx)
+	if err != nil {
+		t.Fatalf("read partial: %v", err)
+	}
+	var ev struct{ Kind, Text string }
+	if err := json.Unmarshal(raw, &ev); err != nil {
+		t.Fatalf("decode partial: %v (%s)", err, raw)
+	}
+	if ev.Kind != "partial" || ev.Text == "" {
+		t.Fatalf("expected partial event with text, got %+v", ev)
+	}
+
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"commit"}`)); err != nil {
+		t.Fatalf("write commit: %v", err)
+	}
+	// Drain until we see the final event.
+	var sawFinal bool
+	for !sawFinal {
+		_, raw, err := conn.Read(ctx)
+		if err != nil {
+			t.Fatalf("read after commit: %v", err)
+		}
+		_ = json.Unmarshal(raw, &ev)
+		if ev.Kind == "final" {
+			sawFinal = true
+		}
 	}
 }
 

@@ -454,6 +454,7 @@ body{background-size: 3px 3px, 100% 100%}
   </form>
   <div class="preset-row" id="presetRow">
    <button type="button" class="preset-btn" id="presetBtn" onclick="sendPresetVoice()" title="Mandar como nota de voz">▶ Enviar como nota de voz</button>
+   <button type="button" class="preset-btn" id="micBtn" onclick="toggleLiveMic()" title="Hablar y ver la transcripción en vivo">🎤 Dictar</button>
   </div>
   <div class="cta-footer" id="ctaFoot">
    <span>¿Te gusta cómo responde?</span>
@@ -606,6 +607,71 @@ async function resetBiz() {
  // Re-fetches server defaults by clearing and reloading via the cookie session would be easier;
  // simplest path: reload the page so we get the prefilled values from the server again.
  location.reload();
+}
+
+// Live-mic dictation. Streams 16kHz PCM16 mono to /demo/transcribe/ws and
+// pipes partial transcripts into the composer's text field. When the user
+// hits Dictar again we commit, wait for the final transcript, then stop.
+// In dev without a streaming provider configured the WS rejects with 503
+// and we surface a one-line note instead of breaking the rest of the demo.
+let micState = null;
+async function toggleLiveMic(){
+ const btn = document.getElementById('micBtn');
+ if (micState) { await stopLiveMic(); return; }
+ btn.disabled = true;
+ btn.textContent = '… conectando';
+ try {
+  const ws = new WebSocket(location.origin.replace(/^http/, 'ws') + '/demo/transcribe/ws');
+  ws.binaryType = 'arraybuffer';
+  await new Promise((res, rej) => {
+   ws.onopen = res;
+   ws.onerror = () => rej(new Error('no live transcription'));
+  });
+  const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+  const ctx = new (window.AudioContext || window.webkitAudioContext)({sampleRate: 16000});
+  const src = ctx.createMediaStreamSource(stream);
+  // Worklet code is a string we inline as a Blob URL so the demo stays
+  // single-file. Captures float32 frames, downscales to int16 PCM and
+  // posts the resulting buffer back to the main thread.
+  const workletCode = "class P extends AudioWorkletProcessor { process(inputs){ const ch = inputs[0][0]; if(!ch) return true; const out = new Int16Array(ch.length); for (let i=0;i<ch.length;i++){ const s = Math.max(-1, Math.min(1, ch[i])); out[i] = s < 0 ? s * 0x8000 : s * 0x7fff; } this.port.postMessage(out.buffer, [out.buffer]); return true; } } registerProcessor('chala-pcm', P);";
+  const blob = new Blob([workletCode], {type: 'application/javascript'});
+  await ctx.audioWorklet.addModule(URL.createObjectURL(blob));
+  const node = new AudioWorkletNode(ctx, 'chala-pcm');
+  node.port.onmessage = (ev) => { if (ws.readyState === 1) ws.send(ev.data); };
+  src.connect(node);
+  node.connect(ctx.destination); // satisfies graph; gain 0 in destination won't actually play mic back
+
+  ws.onmessage = (m) => {
+   try {
+    const d = JSON.parse(m.data);
+    if (d.kind === 'partial' || d.kind === 'final') {
+     textInput.value = d.text;
+    }
+    if (d.kind === 'final') { stopLiveMic(); }
+    if (d.kind === 'error') { console.warn('transcribe:', d.text); }
+   } catch(e){}
+  };
+  micState = {ws, ctx, stream, node, src};
+  btn.disabled = false;
+  btn.textContent = '⏹ Detener';
+ } catch (err) {
+  console.warn('mic:', err);
+  btn.disabled = false;
+  btn.textContent = '🎤 Dictar';
+  alert('Dictado en vivo no disponible. Usa el botón 🎙 para subir un archivo.');
+ }
+}
+async function stopLiveMic(){
+ if (!micState) return;
+ const s = micState;
+ micState = null;
+ try { s.node.disconnect(); s.src.disconnect(); } catch(e){}
+ try { s.stream.getTracks().forEach(t => t.stop()); } catch(e){}
+ try { if (s.ws.readyState === 1) s.ws.send(JSON.stringify({type:'commit'})); } catch(e){}
+ try { await s.ctx.close(); } catch(e){}
+ setTimeout(() => { try { s.ws.close(); } catch(e){} }, 500);
+ const btn = document.getElementById('micBtn');
+ btn.textContent = '🎤 Dictar';
 }
 
 // Any keystroke in the form counts as editing the business

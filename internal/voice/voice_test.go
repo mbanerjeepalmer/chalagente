@@ -118,6 +118,55 @@ func TestMockFailNext(t *testing.T) {
 	}
 }
 
+// --- MockProvider streaming ----------------------------------------------
+
+func TestMockOpenStreamFlow(t *testing.T) {
+	m := &MockProvider{}
+	s, err := m.OpenStream(context.Background(), StreamOptions{SampleRate: 16000})
+	if err != nil {
+		t.Fatalf("OpenStream: %v", err)
+	}
+	if err := s.SendAudio([]byte{1, 2, 3, 4}); err != nil {
+		t.Fatalf("SendAudio: %v", err)
+	}
+	got, err := s.Recv()
+	if err != nil {
+		t.Fatalf("Recv partial: %v", err)
+	}
+	if got.Kind != StreamEventPartial || got.Text == "" {
+		t.Fatalf("expected partial event with text, got %+v", got)
+	}
+	if err := s.Commit(); err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+	// Drain until the final event arrives.
+	var final StreamEvent
+	for {
+		ev, err := s.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("Recv drain: %v", err)
+		}
+		if ev.Kind == StreamEventFinal {
+			final = ev
+			break
+		}
+	}
+	if final.Kind != StreamEventFinal || final.Text == "" {
+		t.Fatalf("expected final event with text, got %+v", final)
+	}
+	_ = s.Close()
+}
+
+func TestMockOpenStreamFailNext(t *testing.T) {
+	m := &MockProvider{FailNext: true}
+	if _, err := m.OpenStream(context.Background(), StreamOptions{}); !errors.Is(err, ErrMockForced) {
+		t.Fatalf("expected ErrMockForced, got %v", err)
+	}
+}
+
 // --- ElevenLabsProvider --------------------------------------------------
 
 func TestElevenLabsNoAPIKey(t *testing.T) {

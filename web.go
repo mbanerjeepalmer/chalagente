@@ -38,6 +38,7 @@ func (a *App) Mux() http.Handler {
 	mux.HandleFunc("/demo/history", a.handleTryHistory)
 	mux.HandleFunc("/demo/reset", a.handleTryReset)
 	mux.HandleFunc("GET /demo/preset.ogg", a.handleTryPresetAudio)
+	mux.HandleFunc("/demo/transcribe/ws", a.handleTryTranscribeWS)
 
 	protected := http.NewServeMux()
 	protected.HandleFunc("/onboarding", a.handleOnboarding)

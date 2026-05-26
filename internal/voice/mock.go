@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"io"
 	"sync"
 )
 
@@ -56,6 +57,94 @@ func (m *MockProvider) Transcribe(_ context.Context, audio []byte, _ string) (Tr
 		Text:     "transcripción simulada: " + tag,
 		Language: lang,
 	}, nil
+}
+
+// OpenStream returns a fake streaming transcription session. It accumulates
+// audio bytes, hashes them, and emits a single committed transcript when
+// the caller Commits. Lets the WS bridge handler be exercised end-to-end
+// without a real ElevenLabs key.
+func (m *MockProvider) OpenStream(ctx context.Context, opts StreamOptions) (TranscriptionStream, error) {
+	if m.consumeFailNext() {
+		return nil, ErrMockForced
+	}
+	s := &mockStream{
+		events: make(chan StreamEvent, 4),
+		closed: make(chan struct{}),
+		lang:   opts.Language,
+	}
+	if s.lang == "" {
+		s.lang = "es"
+	}
+	return s, nil
+}
+
+type mockStream struct {
+	mu     sync.Mutex
+	hash   []byte // running sha256 of all audio bytes received
+	events chan StreamEvent
+	closed chan struct{}
+	lang   string
+}
+
+func (s *mockStream) SendAudio(pcm16 []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	select {
+	case <-s.closed:
+		return io.ErrClosedPipe
+	default:
+	}
+	// Cheap rolling hash: feed prior hash + new bytes back through sha256.
+	h := sha256.New()
+	h.Write(s.hash)
+	h.Write(pcm16)
+	s.hash = h.Sum(nil)
+	// Emit a partial roughly every chunk to simulate streaming behaviour.
+	tag := base64.StdEncoding.EncodeToString(s.hash)[:8]
+	select {
+	case s.events <- StreamEvent{Kind: StreamEventPartial, Text: "… " + tag}:
+	default:
+	}
+	return nil
+}
+
+func (s *mockStream) Recv() (StreamEvent, error) {
+	select {
+	case e, ok := <-s.events:
+		if !ok {
+			return StreamEvent{}, io.EOF
+		}
+		return e, nil
+	case <-s.closed:
+		return StreamEvent{}, io.EOF
+	}
+}
+
+func (s *mockStream) Commit() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tag := "(silencio)"
+	if len(s.hash) > 0 {
+		tag = "transcripción simulada: " + base64.StdEncoding.EncodeToString(s.hash)[:16]
+	}
+	select {
+	case s.events <- StreamEvent{Kind: StreamEventFinal, Text: tag}:
+	case <-s.closed:
+		return io.ErrClosedPipe
+	}
+	close(s.events)
+	return nil
+}
+
+func (s *mockStream) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	select {
+	case <-s.closed:
+	default:
+		close(s.closed)
+	}
+	return nil
 }
 
 // Synthesize returns 1024 deterministic bytes derived from (voiceID, text). The
