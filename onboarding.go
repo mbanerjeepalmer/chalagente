@@ -341,10 +341,19 @@ func (a *App) handleOnboardingFinish(w http.ResponseWriter, r *http.Request) {
 }
 
 func waMeURL(jidStr string) string {
+	phone := phoneFromJID(jidStr)
+	if phone == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://wa.me/%s", phone)
+}
+
+// phoneFromJID extracts the bare phone number from a whatsmeow JID. JIDs look
+// like "5215512345678.0:13@s.whatsapp.net" or "5215512345678@s.whatsapp.net".
+func phoneFromJID(jidStr string) string {
 	if jidStr == "" {
 		return ""
 	}
-	// JID looks like "5215512345678.0:13@s.whatsapp.net" or "5215512345678@s.whatsapp.net"
 	at := strings.Index(jidStr, "@")
 	if at <= 0 {
 		return ""
@@ -356,7 +365,7 @@ func waMeURL(jidStr string) string {
 	if colon := strings.Index(user, ":"); colon > 0 {
 		user = user[:colon]
 	}
-	return fmt.Sprintf("https://wa.me/%s", user)
+	return user
 }
 
 // ----- templates -----

@@ -128,6 +128,11 @@ type Business struct {
 	// mentioned. When false, the agent responds to every incoming message
 	// (subject to AgentEnabled).
 	TriggerRequired bool
+	// WAPrefillTemplate is the text that gets URL-encoded into the
+	// wa.me?text= prefill on the customer-facing redirect. Supports a
+	// "{business}" placeholder which is substituted with the business name
+	// at render time. Empty means "use the built-in default".
+	WAPrefillTemplate string
 	VoiceMode    string // "auto" | "always" | "never"
 	VoiceID      string
 	CreatedAt    time.Time
@@ -441,8 +446,8 @@ func (s *Store) CreateBusiness(ctx context.Context, userID string) (Business, er
 		`INSERT INTO businesses(
 			id, user_id, name, maps_place_id, address, phone, hours, categories,
 			website, extra_info, wa_device_jid, agent_enabled, trigger_required,
-			voice_mode, voice_id, created_at, updated_at
-		) VALUES(?, ?, '', NULL, '', '', '', '', '', '', NULL, 1, 1, 'auto', NULL, ?, ?)`,
+			wa_prefill_template, voice_mode, voice_id, created_at, updated_at
+		) VALUES(?, ?, '', NULL, '', '', '', '', '', '', NULL, 1, 1, '', 'auto', NULL, ?, ?)`,
 		b.ID, b.UserID,
 		b.CreatedAt.Format(time.RFC3339Nano),
 		b.UpdatedAt.Format(time.RFC3339Nano),
@@ -455,7 +460,8 @@ func (s *Store) CreateBusiness(ctx context.Context, userID string) (Business, er
 
 const businessCols = `id, user_id, name, maps_place_id, address, phone, hours,
 	categories, website, extra_info, wa_device_jid, agent_enabled,
-	trigger_required, voice_mode, voice_id, created_at, updated_at`
+	trigger_required, wa_prefill_template, voice_mode, voice_id,
+	created_at, updated_at`
 
 func scanBusiness(row *sql.Row) (Business, error) {
 	var b Business
@@ -471,7 +477,7 @@ func scanBusiness(row *sql.Row) (Business, error) {
 	err := row.Scan(
 		&b.ID, &b.UserID, &b.Name, &mapsPlaceID, &b.Address, &b.Phone,
 		&b.Hours, &b.Categories, &b.Website, &b.ExtraInfo, &waDeviceJID,
-		&agentInt, &triggerInt, &b.VoiceMode, &voiceID, &createdAt, &updatedAt,
+		&agentInt, &triggerInt, &b.WAPrefillTemplate, &b.VoiceMode, &voiceID, &createdAt, &updatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Business{}, ErrNotFound
@@ -529,13 +535,14 @@ func (s *Store) UpdateBusiness(ctx context.Context, b Business) error {
 		`UPDATE businesses SET
 			name = ?, maps_place_id = ?, address = ?, phone = ?, hours = ?,
 			categories = ?, website = ?, extra_info = ?, wa_device_jid = ?,
-			agent_enabled = ?, trigger_required = ?, voice_mode = ?, voice_id = ?, updated_at = ?
+			agent_enabled = ?, trigger_required = ?, wa_prefill_template = ?,
+			voice_mode = ?, voice_id = ?, updated_at = ?
 		WHERE id = ?`,
 		b.Name,
 		nullableString(b.MapsPlaceID),
 		b.Address, b.Phone, b.Hours, b.Categories, b.Website, b.ExtraInfo,
 		nullableString(b.WADeviceJID),
-		agentInt, triggerInt, b.VoiceMode,
+		agentInt, triggerInt, b.WAPrefillTemplate, b.VoiceMode,
 		nullableString(b.VoiceID),
 		updated.Format(time.RFC3339Nano),
 		b.ID,

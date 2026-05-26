@@ -2,9 +2,11 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -13,15 +15,66 @@ import (
 	"rsc.io/qr"
 )
 
+// defaultPrefillTemplate is the seed copy a business gets if they haven't
+// customised their wa.me prefill yet. Refining-notes answer was
+// 'Chalagente, help me at {business name}'. The placeholder is substituted
+// in resolvePrefill.
+const defaultPrefillTemplate = "Chalagente, help me at {business}"
+
+// resolvePrefill expands the per-business prefill template against the
+// business name. If the tenant left the template blank we fall back to
+// defaultPrefillTemplate. We also re-insert the trigger keyword silently
+// when the business has gating on but their custom template forgot it,
+// so a customer scanning the QR always trips the agent.
+func resolvePrefill(b store.Business) string {
+	tpl := strings.TrimSpace(b.WAPrefillTemplate)
+	if tpl == "" {
+		tpl = defaultPrefillTemplate
+	}
+	out := strings.ReplaceAll(tpl, "{business}", b.Name)
+	if b.TriggerRequired && !strings.Contains(strings.ToLower(out), triggerKeyword) {
+		out = "Chalagente, " + out
+	}
+	return out
+}
+
+// businessShareURL is the canonical link a business hands out — a
+// chalagente.com /go/<id> redirect that lands the customer in WhatsApp with
+// the prefill text already typed. The pretty URL is the part we encode into
+// the QR; the redirect handler unfolds it into the real wa.me link.
+func (a *App) businessShareURL(b store.Business) string {
+	base := strings.TrimRight(a.BaseURL, "/")
+	if base == "" {
+		base = "https://chalagente.com"
+	}
+	return fmt.Sprintf("%s/go/%s", base, b.ID)
+}
+
+// businessShareTarget builds the wa.me URL we'll 302 the customer to. It's
+// also used to render the dashboard's "wa.me link" preview.
+func businessShareTarget(b store.Business) string {
+	phone := phoneFromJID(b.WADeviceJID)
+	if phone == "" {
+		return ""
+	}
+	text := resolvePrefill(b)
+	if text == "" {
+		return fmt.Sprintf("https://wa.me/%s", phone)
+	}
+	return fmt.Sprintf("https://wa.me/%s?text=%s", phone, url.QueryEscape(text))
+}
+
 type dashData struct {
-	Business             store.Business
-	WAMeURL              string
-	Connected            bool
-	LoggedIn             bool
-	Conversations        []convoRow
-	Flash                string
-	ClerkPublishableKey  string
-	ClerkFrontendAPI     string
+	Business            store.Business
+	WAMeURL             string // wa.me link with the prefilled text
+	ShareURL            string // /go/<id> redirect URL — what we put on the QR
+	PrefillResolved     string // the actual prefilled message text, post-template
+	Connected           bool
+	LoggedIn            bool
+	Conversations       []convoRow
+	Flash               string
+	ClerkPublishableKey string
+	ClerkFrontendAPI    string
 }
 
 type convoRow struct {
@@ -65,12 +118,14 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request) {
 
 	status := waStatusFor(a, b.ID)
 	data := dashData{
-		Business:      b,
-		WAMeURL:       waMeURL(b.WADeviceJID),
-		Connected:     status.Connected,
-		LoggedIn:      status.LoggedIn,
-		Conversations: rows,
-		Flash:         r.URL.Query().Get("flash"),
+		Business:        b,
+		WAMeURL:         businessShareTarget(b),
+		ShareURL:        a.businessShareURL(b),
+		PrefillResolved: resolvePrefill(b),
+		Connected:       status.Connected,
+		LoggedIn:        status.LoggedIn,
+		Conversations:   rows,
+		Flash:           r.URL.Query().Get("flash"),
 	}
 	if a.ClerkAuth != nil {
 		data.ClerkPublishableKey = a.ClerkAuth.PublishableKey
@@ -80,6 +135,31 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	if err := dashTmpl.Execute(w, data); err != nil {
 		log.Printf("dashTmpl: %v", err)
 	}
+}
+
+// handleShareRedirect is the public /go/{id} endpoint. It looks up the
+// business, resolves their current prefill text against the latest business
+// name + keyword setting, and 302s the visitor at the matching wa.me link.
+// 404s are intentional for unknown or unconnected businesses so the URL
+// doesn't leak existence of unpaired tenants.
+func (a *App) handleShareRedirect(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		http.NotFound(w, r)
+		return
+	}
+	b, err := a.Store.GetBusiness(r.Context(), id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	target := businessShareTarget(b)
+	if target == "" {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	http.Redirect(w, r, target, http.StatusFound)
 }
 
 type waStatus struct{ Connected, LoggedIn bool }
@@ -234,6 +314,7 @@ func (a *App) handleDashboardBusiness(w http.ResponseWriter, r *http.Request) {
 		b.Website = strings.TrimSpace(r.PostForm.Get("website"))
 		b.Hours = strings.TrimSpace(r.PostForm.Get("hours"))
 		b.ExtraInfo = strings.TrimSpace(r.PostForm.Get("extra"))
+		b.WAPrefillTemplate = strings.TrimSpace(r.PostForm.Get("wa_prefill_template"))
 		if err := a.Store.UpdateBusiness(r.Context(), b); err != nil {
 			http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -329,11 +410,12 @@ func (a *App) handleDashboardShareQR(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no wa device", http.StatusNotFound)
 		return
 	}
-	link := waMeURL(b.WADeviceJID)
-	if link == "" {
-		http.Error(w, "no wa.me link", http.StatusNotFound)
-		return
-	}
+	// Encode the /go/<id> redirect, not the bare wa.me link. That way the
+	// QR keeps working even if the tenant changes their prefill copy —
+	// the redirect handler reads the current business state at click
+	// time. It also gives us a single place to plug in per-language
+	// matching later.
+	link := a.businessShareURL(b)
 	c, err := qr.Encode(link, qr.M)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -440,7 +522,10 @@ form{display:inline}
   <div class="card" style="text-align:center">
    <h2 style="margin-top:0">Comparte tu número</h2>
    <img class="qr" src="/app/qr.png">
-   <p style="font-size:.85em"><a href="{{ .WAMeURL }}">{{ .WAMeURL }}</a></p>
+   <p style="font-size:.8em;color:#666;margin:.4rem 0 .2rem">Cuando escanean tu QR, el cliente entra a WhatsApp con este mensaje listo para enviar:</p>
+   <p style="font-size:.85em;font-style:italic;background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:.4rem .6rem;margin:.2rem 0">{{ .PrefillResolved }}</p>
+   <p style="font-size:.78em;color:#888;margin:.4rem 0 0">QR apunta a <a href="{{ .ShareURL }}">{{ .ShareURL }}</a></p>
+   <p style="font-size:.78em;color:#888;margin:.2rem 0 0">→ <a href="{{ .WAMeURL }}">{{ .WAMeURL }}</a></p>
   </div>
   <div class="card">
    {{ if .ClerkPublishableKey }}
@@ -543,6 +628,12 @@ button{padding:.6rem 1rem;font-size:1rem;border-radius:4px;border:1px solid #bbb
  <label>Sitio web<input name="website" value="{{ .Business.Website }}"></label>
  <label>Horarios<textarea name="hours" rows="3">{{ .Business.Hours }}</textarea></label>
  <label>Información extra (FAQ, precios, políticas)<textarea name="extra" rows="10">{{ .Business.ExtraInfo }}</textarea></label>
+ <label>Mensaje prellenado del QR
+  <input name="wa_prefill_template" value="{{ .Business.WAPrefillTemplate }}" placeholder="Chalagente, help me at {business}">
+ </label>
+ <p style="font-size:.82em;color:#666;margin:.2rem 0 .8rem">
+  Texto que el cliente ve precargado en WhatsApp al escanear tu QR. Usa <code>{business}</code> para insertar el nombre del negocio. Si la palabra clave «Chalagente» es obligatoria y tu mensaje no la incluye, se añade automáticamente.
+ </p>
  <button>Guardar</button>
 </form>
 </body></html>`))

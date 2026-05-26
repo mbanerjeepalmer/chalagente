@@ -24,6 +24,11 @@ func (a *App) Mux() http.Handler {
 		http.Redirect(w, r, "/sign-up", http.StatusSeeOther)
 	})
 
+	// /go/{id} is the public customer-facing redirect — a wa.me wrapper
+	// that prefills the customer's first message. Kept on the unauthed
+	// mux because the whole point is anyone with the link can click it.
+	mux.HandleFunc("GET /go/{id}", a.handleShareRedirect)
+
 	mux.HandleFunc("/demo", a.handleTryPage)
 	mux.HandleFunc("/demo/business", a.handleTryBusiness)
 	mux.HandleFunc("/demo/send", a.handleTrySend)

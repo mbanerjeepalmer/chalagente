@@ -119,6 +119,12 @@ CREATE UNIQUE INDEX idx_users_clerk_user_id ON users(clerk_user_id) WHERE clerk_
 ALTER TABLE businesses ADD COLUMN trigger_required INTEGER NOT NULL DEFAULT 1;
 `,
 	},
+	{
+		name: "0004_wa_prefill",
+		sql: `
+ALTER TABLE businesses ADD COLUMN wa_prefill_template TEXT NOT NULL DEFAULT '';
+`,
+	},
 }
 
 // runMigrations applies any pending migrations, in order. It creates the
