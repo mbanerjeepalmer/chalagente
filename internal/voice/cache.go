@@ -50,6 +50,18 @@ func (c *CachedProvider) Transcribe(ctx context.Context, audio []byte, mimeType 
 	return c.Inner.Transcribe(ctx, audio, mimeType)
 }
 
+// OpenStream forwards to the inner provider when it implements
+// StreamingTranscriber. There's nothing to cache here — every session is
+// unique audio — so this is a thin pass-through that lets callers keep
+// holding a CachedProvider as their app.Voice without losing streaming.
+func (c *CachedProvider) OpenStream(ctx context.Context, opts StreamOptions) (TranscriptionStream, error) {
+	s, ok := c.Inner.(StreamingTranscriber)
+	if !ok {
+		return nil, ErrNoAPIKey
+	}
+	return s.OpenStream(ctx, opts)
+}
+
 // Synthesize returns the cached result if (voiceID, text) is known, otherwise
 // calls the inner provider and stores the result.
 func (c *CachedProvider) Synthesize(ctx context.Context, text, voiceID string) (Synthesis, error) {
