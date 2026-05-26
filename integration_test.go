@@ -271,6 +271,65 @@ func TestUnpairWhatsAppClearsDeviceJID(t *testing.T) {
 	}
 }
 
+func TestConversationHistoryViewer(t *testing.T) {
+	a := newTestApp(t)
+	srv := httptest.NewServer(a.Mux())
+	defer srv.Close()
+	jar, _ := cookiejar.New(nil)
+	signInAs(t, a, jar, srv, "clerk-hist")
+
+	u, err := a.Store.GetUserByEmail(context.Background(), "clerk-hist@example.com")
+	if err != nil {
+		t.Fatalf("GetUserByEmail: %v", err)
+	}
+	biz, err := a.Store.CreateBusiness(context.Background(), u.ID)
+	if err != nil {
+		t.Fatalf("CreateBusiness: %v", err)
+	}
+	convo, err := a.Store.UpsertConversation(context.Background(), biz.ID, "5215512345678@s.whatsapp.net")
+	if err != nil {
+		t.Fatalf("UpsertConversation: %v", err)
+	}
+	for _, m := range []store.Message{
+		{Direction: "in", Kind: "text", Body: "Hola, ¿abren hoy?"},
+		{Direction: "out", Kind: "text", Body: "Sí, hasta las 22h."},
+		{Direction: "in", Kind: "audio", Body: ""},
+	} {
+		if err := a.Store.AppendMessage(context.Background(), convo.ID, m); err != nil {
+			t.Fatalf("AppendMessage: %v", err)
+		}
+	}
+
+	client := &http.Client{Jar: jar}
+	res, err := client.Get(srv.URL + "/app/conversations/" + convo.ID)
+	if err != nil {
+		t.Fatalf("GET history: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("status: %d", res.StatusCode)
+	}
+	body, _ := io.ReadAll(res.Body)
+	for _, want := range []string{"¿abren hoy?", "hasta las 22h.", "audio", "solo lectura"} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("history missing %q in body: %s", want, first(string(body), 600))
+		}
+	}
+
+	// Sanity: another user's convo should 404 even if they guess the id.
+	jar2, _ := cookiejar.New(nil)
+	signInAs(t, a, jar2, srv, "clerk-other")
+	other := &http.Client{Jar: jar2}
+	res2, err := other.Get(srv.URL + "/app/conversations/" + convo.ID)
+	if err != nil {
+		t.Fatalf("GET as other: %v", err)
+	}
+	res2.Body.Close()
+	if res2.StatusCode != http.StatusNotFound {
+		t.Fatalf("other-user access status: got %d, want 404", res2.StatusCode)
+	}
+}
+
 func TestTriggerKeywordExplained(t *testing.T) {
 	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())

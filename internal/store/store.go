@@ -616,6 +616,29 @@ func (s *Store) UpsertConversation(ctx context.Context, businessID, customerJID 
 	return c, nil
 }
 
+// GetConversation fetches a conversation by id. Returns ErrNotFound when the
+// id is unknown.
+func (s *Store) GetConversation(ctx context.Context, id string) (Conversation, error) {
+	var c Conversation
+	var detectedLang sql.NullString
+	var createdAt, updatedAt string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, business_id, customer_jid, detected_lang, created_at, updated_at
+		 FROM conversations WHERE id = ?`,
+		id,
+	).Scan(&c.ID, &c.BusinessID, &c.CustomerJID, &detectedLang, &createdAt, &updatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Conversation{}, ErrNotFound
+	}
+	if err != nil {
+		return Conversation{}, fmt.Errorf("get conversation: %w", err)
+	}
+	c.DetectedLang = detectedLang.String
+	c.CreatedAt = parseTime(createdAt)
+	c.UpdatedAt = parseTime(updatedAt)
+	return c, nil
+}
+
 // AppendMessage stores a new message in convoID. The caller may leave
 // msg.ID and msg.CreatedAt zero — they will be generated. msg is not
 // mutated; the returned values are written into a fresh row.
