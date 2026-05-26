@@ -51,6 +51,7 @@ func (a *App) Mux() http.Handler {
 
 	// Canonical admin routes — /admin/* is the source of truth.
 	protected.HandleFunc("/admin", a.handleDashboard)
+	protected.HandleFunc("GET /admin/connection", a.handleAdminConnection)
 	protected.HandleFunc("GET /admin/conversations/{id}", a.handleDashboardConversation)
 	protected.HandleFunc("/admin/agent", a.handleDashboardAgentToggle)
 	protected.HandleFunc("POST /admin/trigger", a.handleDashboardTriggerToggle)
