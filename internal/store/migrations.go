@@ -131,6 +131,12 @@ ALTER TABLE businesses ADD COLUMN wa_prefill_template TEXT NOT NULL DEFAULT '';
 ALTER TABLE businesses ADD COLUMN wa_prefill_translations TEXT NOT NULL DEFAULT '{}';
 `,
 	},
+	{
+		name: "0006_conversation_agent_enabled",
+		sql: `
+ALTER TABLE conversations ADD COLUMN agent_enabled INTEGER NOT NULL DEFAULT 1;
+`,
+	},
 }
 
 // runMigrations applies any pending migrations, in order. It creates the

@@ -111,6 +111,10 @@ func (a *App) processIncoming(businessID string, msg *events.Message) {
 		log.Printf("pipeline: agent disabled for %s; logged only", businessID)
 		return
 	}
+	if !convo.AgentEnabled {
+		log.Printf("pipeline: agent disabled for conversation %s; logged only", convo.ID)
+		return
+	}
 
 	history, err := a.Store.ListMessages(ctx, convo.ID, 20)
 	if err != nil {

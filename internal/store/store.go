@@ -151,6 +151,11 @@ type Conversation struct {
 	BusinessID   string
 	CustomerJID  string
 	DetectedLang string
+	// AgentEnabled gates the agent on a per-conversation basis. Defaults
+	// to true; the operator can flip it from the conversation viewer to
+	// hand the chat over to a human without disabling the agent for the
+	// whole business.
+	AgentEnabled bool
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
@@ -588,39 +593,54 @@ func nullableString(s string) any {
 
 // ----- Conversations + messages -----
 
+const conversationCols = `id, business_id, customer_jid, detected_lang,
+	agent_enabled, created_at, updated_at`
+
+// scanConversationRow reads a row produced by a SELECT conversationCols
+// query into c. Centralises the bookkeeping for the nullable + int columns.
+func scanConversationRow(scan func(...any) error) (Conversation, error) {
+	var c Conversation
+	var detectedLang sql.NullString
+	var agentInt int
+	var createdAt, updatedAt string
+	if err := scan(&c.ID, &c.BusinessID, &c.CustomerJID, &detectedLang,
+		&agentInt, &createdAt, &updatedAt); err != nil {
+		return Conversation{}, err
+	}
+	c.DetectedLang = detectedLang.String
+	c.AgentEnabled = agentInt != 0
+	c.CreatedAt = parseTime(createdAt)
+	c.UpdatedAt = parseTime(updatedAt)
+	return c, nil
+}
+
 // UpsertConversation returns the existing conversation for (businessID,
 // customerJID) or creates a new one if none exists. Idempotent.
 func (s *Store) UpsertConversation(ctx context.Context, businessID, customerJID string) (Conversation, error) {
 	// Fast path: already exists.
-	var c Conversation
-	var detectedLang sql.NullString
-	var createdAt, updatedAt string
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, business_id, customer_jid, detected_lang, created_at, updated_at
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+conversationCols+`
 		 FROM conversations WHERE business_id = ? AND customer_jid = ?`,
 		businessID, customerJID,
-	).Scan(&c.ID, &c.BusinessID, &c.CustomerJID, &detectedLang, &createdAt, &updatedAt)
-	if err == nil {
-		c.DetectedLang = detectedLang.String
-		c.CreatedAt = parseTime(createdAt)
-		c.UpdatedAt = parseTime(updatedAt)
+	)
+	if c, err := scanConversationRow(row.Scan); err == nil {
 		return c, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
+	} else if !errors.Is(err, sql.ErrNoRows) {
 		return Conversation{}, fmt.Errorf("lookup convo: %w", err)
 	}
 
 	now := time.Now().UTC()
-	c = Conversation{
-		ID:          uuid.NewString(),
-		BusinessID:  businessID,
-		CustomerJID: customerJID,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+	c := Conversation{
+		ID:           uuid.NewString(),
+		BusinessID:   businessID,
+		CustomerJID:  customerJID,
+		AgentEnabled: true,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
-	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO conversations(id, business_id, customer_jid, detected_lang, created_at, updated_at)
-		 VALUES(?, ?, ?, NULL, ?, ?)`,
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO conversations(id, business_id, customer_jid, detected_lang, agent_enabled, created_at, updated_at)
+		 VALUES(?, ?, ?, NULL, 1, ?, ?)`,
 		c.ID, c.BusinessID, c.CustomerJID,
 		c.CreatedAt.Format(time.RFC3339Nano),
 		c.UpdatedAt.Format(time.RFC3339Nano),
@@ -628,17 +648,11 @@ func (s *Store) UpsertConversation(ctx context.Context, businessID, customerJID 
 	if err != nil {
 		// Race: someone else just inserted; re-read.
 		row := s.db.QueryRowContext(ctx,
-			`SELECT id, business_id, customer_jid, detected_lang, created_at, updated_at
+			`SELECT `+conversationCols+`
 			 FROM conversations WHERE business_id = ? AND customer_jid = ?`,
 			businessID, customerJID,
 		)
-		var existing Conversation
-		var dl sql.NullString
-		var ca, ua string
-		if err2 := row.Scan(&existing.ID, &existing.BusinessID, &existing.CustomerJID, &dl, &ca, &ua); err2 == nil {
-			existing.DetectedLang = dl.String
-			existing.CreatedAt = parseTime(ca)
-			existing.UpdatedAt = parseTime(ua)
+		if existing, err2 := scanConversationRow(row.Scan); err2 == nil {
 			return existing, nil
 		}
 		return Conversation{}, fmt.Errorf("upsert convo: %w", err)
@@ -649,24 +663,38 @@ func (s *Store) UpsertConversation(ctx context.Context, businessID, customerJID 
 // GetConversation fetches a conversation by id. Returns ErrNotFound when the
 // id is unknown.
 func (s *Store) GetConversation(ctx context.Context, id string) (Conversation, error) {
-	var c Conversation
-	var detectedLang sql.NullString
-	var createdAt, updatedAt string
-	err := s.db.QueryRowContext(ctx,
-		`SELECT id, business_id, customer_jid, detected_lang, created_at, updated_at
-		 FROM conversations WHERE id = ?`,
-		id,
-	).Scan(&c.ID, &c.BusinessID, &c.CustomerJID, &detectedLang, &createdAt, &updatedAt)
+	row := s.db.QueryRowContext(ctx,
+		`SELECT `+conversationCols+` FROM conversations WHERE id = ?`, id,
+	)
+	c, err := scanConversationRow(row.Scan)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Conversation{}, ErrNotFound
 	}
 	if err != nil {
 		return Conversation{}, fmt.Errorf("get conversation: %w", err)
 	}
-	c.DetectedLang = detectedLang.String
-	c.CreatedAt = parseTime(createdAt)
-	c.UpdatedAt = parseTime(updatedAt)
 	return c, nil
+}
+
+// SetConversationAgentEnabled flips the per-conversation agent gate. The
+// business-level AgentEnabled / TriggerRequired flags still apply on top;
+// disabling here is the "hand this chat to a human" toggle.
+func (s *Store) SetConversationAgentEnabled(ctx context.Context, id string, enabled bool) error {
+	v := 0
+	if enabled {
+		v = 1
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE conversations SET agent_enabled = ?, updated_at = ? WHERE id = ?`,
+		v, time.Now().UTC().Format(time.RFC3339Nano), id,
+	)
+	if err != nil {
+		return fmt.Errorf("set conversation agent_enabled: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // AppendMessage stores a new message in convoID. The caller may leave
@@ -736,7 +764,7 @@ func (s *Store) ListMessages(ctx context.Context, convoID string, limit int) ([]
 // most recently active first.
 func (s *Store) ListConversations(ctx context.Context, businessID string, limit int) ([]Conversation, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, business_id, customer_jid, detected_lang, created_at, updated_at
+		`SELECT `+conversationCols+`
 		 FROM conversations WHERE business_id = ?
 		 ORDER BY updated_at DESC, id DESC
 		 LIMIT ?`,
@@ -749,16 +777,10 @@ func (s *Store) ListConversations(ctx context.Context, businessID string, limit 
 
 	var out []Conversation
 	for rows.Next() {
-		var c Conversation
-		var detectedLang sql.NullString
-		var createdAt, updatedAt string
-		if err := rows.Scan(&c.ID, &c.BusinessID, &c.CustomerJID, &detectedLang,
-			&createdAt, &updatedAt); err != nil {
+		c, err := scanConversationRow(rows.Scan)
+		if err != nil {
 			return nil, fmt.Errorf("scan convo: %w", err)
 		}
-		c.DetectedLang = detectedLang.String
-		c.CreatedAt = parseTime(createdAt)
-		c.UpdatedAt = parseTime(updatedAt)
 		out = append(out, c)
 	}
 	if err := rows.Err(); err != nil {
