@@ -396,11 +396,13 @@ type historyMessage struct {
 }
 
 type historyView struct {
-	Business    store.Business
-	CustomerJID string
-	Messages    []historyMessage
-	Total       int
-	Truncated   bool
+	Business       store.Business
+	ConversationID string
+	CustomerJID    string
+	AgentEnabled   bool
+	Messages       []historyMessage
+	Total          int
+	Truncated      bool
 }
 
 // handleDashboardConversation renders the full read-only message history for
@@ -449,16 +451,45 @@ func (a *App) handleDashboardConversation(w http.ResponseWriter, r *http.Request
 	}
 
 	view := historyView{
-		Business:    b,
-		CustomerJID: convo.CustomerJID,
-		Messages:    msgs,
-		Total:       len(msgs),
-		Truncated:   len(raw) == historyMaxMessages,
+		Business:       b,
+		ConversationID: convo.ID,
+		CustomerJID:    convo.CustomerJID,
+		AgentEnabled:   convo.AgentEnabled,
+		Messages:       msgs,
+		Total:          len(msgs),
+		Truncated:      len(raw) == historyMaxMessages,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := dashHistoryTmpl.Execute(w, view); err != nil {
 		log.Printf("dashHistoryTmpl: %v", err)
 	}
+}
+
+// handleConversationAgentToggle flips the per-conversation agent gate. The
+// business owner can use it to hand a single chat over to a human (the
+// agent stops replying in that thread) without changing the
+// business-level AgentEnabled flag that affects every other chat.
+func (a *App) handleConversationAgentToggle(w http.ResponseWriter, r *http.Request) {
+	b, ok := a.requireBusiness(w, r)
+	if !ok {
+		return
+	}
+	convoID := r.PathValue("id")
+	convo, err := a.Store.GetConversation(r.Context(), convoID)
+	if err != nil || convo.BusinessID != b.ID {
+		http.NotFound(w, r)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	enabled := r.PostForm.Get("enabled") == "1"
+	if err := a.Store.SetConversationAgentEnabled(r.Context(), convoID, enabled); err != nil {
+		http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	http.Redirect(w, r, "/admin/conversations/"+convoID, http.StatusSeeOther)
 }
 
 func (a *App) handleDashboardTriggerToggle(w http.ResponseWriter, r *http.Request) {
@@ -922,12 +953,27 @@ var dashHistoryTmpl = template.Must(template.New("dashHistory").Parse(`<!doctype
 .meta{font-size:.85em;color:var(--muted);margin:0}
 .empty{padding:2rem;text-align:center;color:var(--muted)}
 .note{color:var(--muted);font-size:.85em;margin-top:.8rem;text-align:center}
+.agent-state{display:flex;justify-content:space-between;align-items:center;background:var(--bone);border:1px solid var(--line);border-radius:6px;padding:.55rem .85rem;margin:0 0 .8rem;font-size:.88em;gap:.6rem;flex-wrap:wrap}
+.agent-state button{padding:.4rem .8rem;border:1px solid var(--ink);background:transparent;color:var(--ink);border-radius:4px;cursor:pointer;font-family:inherit;font-size:.85rem}
+.agent-state button:hover{background:rgba(28,26,22,0.05)}
 </style></head><body>
 <div class="wrap">
  <div class="crumbs"><a href="/admin">← Conversaciones</a></div>
  <div class="headline">
   <h1>{{ .CustomerJID }}</h1>
   <p class="meta">{{ .Total }} mensaje{{ if ne .Total 1 }}s{{ end }} · solo lectura</p>
+ </div>
+ <div class="agent-state">
+  <span>Agente en este chat:
+   {{ if .AgentEnabled }}<strong style="color:#054f31">activo</strong>{{ else }}<strong style="color:#6e1d1a">en pausa</strong>{{ end }}
+  </span>
+  <form method="POST" action="/admin/conversations/{{ .ConversationID }}/agent">
+   {{ if .AgentEnabled }}
+    <input type="hidden" name="enabled" value="0"><button type="submit">Pausar agente aquí</button>
+   {{ else }}
+    <input type="hidden" name="enabled" value="1"><button type="submit">Reanudar agente aquí</button>
+   {{ end }}
+  </form>
  </div>
  <div class="chatpane from-business">
   <div class="phead">

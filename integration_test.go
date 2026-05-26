@@ -455,6 +455,78 @@ func TestShareRedirectPicksTranslationFromAcceptLanguage(t *testing.T) {
 	}
 }
 
+func TestPerConversationAgentToggle(t *testing.T) {
+	a := newTestApp(t)
+	srv := httptest.NewServer(a.Mux())
+	defer srv.Close()
+	jar, _ := cookiejar.New(nil)
+	signInAs(t, a, jar, srv, "clerk-pcat")
+	u, _ := a.Store.GetUserByEmail(context.Background(), "clerk-pcat@example.com")
+	biz, err := a.Store.CreateBusiness(context.Background(), u.ID)
+	if err != nil {
+		t.Fatalf("CreateBusiness: %v", err)
+	}
+	convo, err := a.Store.UpsertConversation(context.Background(), biz.ID, "5215512345678@s.whatsapp.net")
+	if err != nil {
+		t.Fatalf("UpsertConversation: %v", err)
+	}
+	if !convo.AgentEnabled {
+		t.Fatalf("expected AgentEnabled=true on fresh conversation, got false")
+	}
+
+	client := &http.Client{Jar: jar}
+
+	// Disable.
+	res, err := client.PostForm(srv.URL+"/admin/conversations/"+convo.ID+"/agent",
+		url.Values{"enabled": []string{"0"}})
+	if err != nil {
+		t.Fatalf("POST disable: %v", err)
+	}
+	res.Body.Close()
+	after, err := a.Store.GetConversation(context.Background(), convo.ID)
+	if err != nil {
+		t.Fatalf("GetConversation: %v", err)
+	}
+	if after.AgentEnabled {
+		t.Fatalf("expected AgentEnabled=false after disable")
+	}
+
+	// Viewer should report 'en pausa' state.
+	resView, err := client.Get(srv.URL + "/admin/conversations/" + convo.ID)
+	if err != nil {
+		t.Fatalf("GET viewer: %v", err)
+	}
+	body, _ := io.ReadAll(resView.Body)
+	resView.Body.Close()
+	if !strings.Contains(string(body), "en pausa") {
+		t.Errorf("viewer missing en-pausa state: %s", first(string(body), 600))
+	}
+	if !strings.Contains(string(body), "Reanudar agente") {
+		t.Errorf("viewer missing reanudar button: %s", first(string(body), 600))
+	}
+
+	// Cross-tenant write should 404.
+	jar2, _ := cookiejar.New(nil)
+	signInAs(t, a, jar2, srv, "clerk-pcat-other")
+	other := &http.Client{Jar: jar2}
+	resX, err := other.PostForm(srv.URL+"/admin/conversations/"+convo.ID+"/agent",
+		url.Values{"enabled": []string{"1"}})
+	if err != nil {
+		t.Fatalf("POST cross-tenant: %v", err)
+	}
+	resX.Body.Close()
+	if resX.StatusCode != http.StatusNotFound {
+		t.Fatalf("cross-tenant status: got %d want 404", resX.StatusCode)
+	}
+	stillOff, err := a.Store.GetConversation(context.Background(), convo.ID)
+	if err != nil {
+		t.Fatalf("GetConversation post-cross: %v", err)
+	}
+	if stillOff.AgentEnabled {
+		t.Fatal("cross-tenant write should not have flipped the gate")
+	}
+}
+
 func TestAdminConnectionScreen(t *testing.T) {
 	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())

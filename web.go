@@ -53,6 +53,7 @@ func (a *App) Mux() http.Handler {
 	protected.HandleFunc("/admin", a.handleDashboard)
 	protected.HandleFunc("GET /admin/connection", a.handleAdminConnection)
 	protected.HandleFunc("GET /admin/conversations/{id}", a.handleDashboardConversation)
+	protected.HandleFunc("POST /admin/conversations/{id}/agent", a.handleConversationAgentToggle)
 	protected.HandleFunc("/admin/agent", a.handleDashboardAgentToggle)
 	protected.HandleFunc("POST /admin/trigger", a.handleDashboardTriggerToggle)
 	protected.HandleFunc("/admin/business", a.handleDashboardBusiness)
