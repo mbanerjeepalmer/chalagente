@@ -791,7 +791,7 @@ func TestConversationHistoryViewer(t *testing.T) {
 		t.Fatalf("status: %d", res.StatusCode)
 	}
 	body, _ := io.ReadAll(res.Body)
-	for _, want := range []string{"¿abren hoy?", "hasta las 22h.", "audio", "solo lectura"} {
+	for _, want := range []string{"¿abren hoy?", "hasta las 22h.", "audio", "solo lectura", `id="flipBtn"`, "Ver como cliente", "from-business"} {
 		if !strings.Contains(string(body), want) {
 			t.Errorf("history missing %q in body: %s", want, first(string(body), 600))
 		}
