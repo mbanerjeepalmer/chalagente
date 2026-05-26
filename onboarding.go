@@ -70,7 +70,7 @@ func (a *App) handleOnboarding(w http.ResponseWriter, r *http.Request) {
 	case "test":
 		http.Redirect(w, r, "/onboarding/test", http.StatusSeeOther)
 	default:
-		http.Redirect(w, r, "/app", http.StatusSeeOther)
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
 	}
 }
 
@@ -337,7 +337,7 @@ func (a *App) handleOnboardingFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.clearPairSession("") // no-op safety
-	http.Redirect(w, r, "/app", http.StatusSeeOther)
+	http.Redirect(w, r, "/admin", http.StatusSeeOther)
 }
 
 func waMeURL(jidStr string) string {
@@ -467,7 +467,7 @@ var onbTestTmpl = template.Must(template.New("onbTest").Parse(onbCommonCSS + `
 </form>
 <script>
 const feed = document.getElementById('feed');
-const es = new EventSource('/app/events');
+const es = new EventSource('/admin/events');
 es.onmessage = (e) => {
  try {
   const d = JSON.parse(e.data);
