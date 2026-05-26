@@ -319,18 +319,12 @@ var tryTmpl = template.Must(template.New("try").Parse(`<!doctype html><html lang
 <title>Demo · Chalagente — chatea con un agente sin registrarte</title>
 ` + layout.FaviconLink + `
 ` + layout.FontsLink + `
-<style>
-:root {
-  --wall:#f1ead9; --wall-shade:#e6dec7; --plaster:#ece2cb; --bone:#faf6ea;
-  --ink:#1c1a16; --ink-soft:#3a352c; --muted:#6b6354; --line:rgba(28,26,22,0.14);
-  --terracotta:#b5482e; --terracotta-deep:#8a3320; --ochre:#c8932b; --indigo:#25406e; --leaf:#4f6a3a;
-}
-*{box-sizing:border-box}
-html,body{margin:0;padding:0;background:var(--wall);color:var(--ink-soft);font-family:"Inter","Helvetica Neue",sans-serif;line-height:1.55;
-  background-image: radial-gradient(rgba(110,90,60,0.05) 1px, transparent 1px), linear-gradient(180deg,var(--wall),var(--wall-shade));
-  background-size: 3px 3px, 100% 100%;}
-h1,h2,h3{font-family:"Cormorant Garamond",Georgia,serif;color:var(--ink);font-weight:600;letter-spacing:-0.005em}
-a{color:var(--terracotta-deep)}
+<style>` + layout.SharedStyles + layout.ChatPaneStyles + `
+/* Demo-specific overrides — tighter line-height than the marketing
+ * pages and a single-radial dotted background (the landing layers two).
+ * Kept inline so the demo's local feel is obviously the local layer. */
+body{line-height:1.55}
+body{background-size: 3px 3px, 100% 100%}
 .topbar{display:flex;justify-content:space-between;align-items:center;padding:.9rem 1.6rem;border-bottom:1px solid var(--line);background:rgba(241,234,217,0.95);backdrop-filter:blur(6px);position:sticky;top:0;z-index:50}
 .topbar .logo{display:flex;align-items:center;gap:.55rem;font-family:"Cormorant Garamond",serif;font-weight:700;font-size:1.3rem;color:var(--ink);text-decoration:none}
 .topbar .logo-mark{width:28px;height:28px;border-radius:50%;background:var(--terracotta);display:grid;place-items:center;color:var(--bone);font-family:"Cormorant Garamond",serif;font-weight:700;font-size:.95rem;box-shadow:inset 0 -2px 0 rgba(0,0,0,0.15)}
@@ -361,16 +355,9 @@ a{color:var(--terracotta-deep)}
 .tooltip::after{content:"";position:absolute;bottom:-6px;right:36px;width:12px;height:12px;background:var(--ink);transform:rotate(45deg)}
 
 /* The WhatsApp chat panel: keep clone styling. */
-.chatpane{display:flex;flex-direction:column;background:#0e1620;border-radius:6px;overflow:hidden;border:1px solid var(--line);box-shadow:0 8px 24px rgba(40,30,15,0.10);min-height:560px}
-.phead{display:flex;align-items:center;gap:.6rem;padding:.8rem 1.2rem;background:#075e54;color:white;border-bottom:1px solid #04443c}
-.phead .avatar{width:36px;height:36px;border-radius:50%;background:#25d366;display:grid;place-items:center;font-weight:700;color:#04130b}
-.phead .name{font-weight:600}.phead .sub{font-size:.75em;opacity:.85}
-.chat{flex:1;overflow-y:auto;padding:1rem 1.2rem;background:#ece5dd;display:flex;flex-direction:column;gap:.4rem;min-height:380px}
-.bubble{max-width:75%;padding:.55rem .75rem;border-radius:12px;font-size:.95rem;color:#222;box-shadow:0 1px 1px rgba(0,0,0,.08);word-wrap:break-word;font-family:"Inter",sans-serif}
-.bubble.in{background:#dcf8c6;align-self:flex-end;border-bottom-right-radius:2px}
-.bubble.out{background:white;align-self:flex-start;border-bottom-left-radius:2px}
-.bubble small{display:block;color:#888;font-size:.7em;margin-top:.2rem}
-audio{width:100%;margin-top:.25rem;height:32px}
+/* chatpane, phead, chat, bubble and audio rules come from
+ * layout.ChatPaneStyles at the top of this style block. */
+.chatpane{min-height:560px}
 .composer{display:flex;gap:.5rem;padding:.6rem .8rem;background:#f0f0f0;border-top:1px solid #ccc}
 .composer input[type=text]{flex:1;padding:.55rem .9rem;border:none;border-radius:18px;font-size:.95rem;font-family:"Inter",sans-serif}
 .composer button{border:none;border-radius:50%;width:42px;height:42px;background:#25d366;color:white;font-size:1.2rem;cursor:pointer}

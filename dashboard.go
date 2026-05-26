@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mbanerjeepalmer/chalagente/internal/layout"
 	"github.com/mbanerjeepalmer/chalagente/internal/store"
 	"github.com/mbanerjeepalmer/chalagente/internal/wamanager"
 	"rsc.io/qr"
@@ -909,36 +910,43 @@ img.qr{width:240px;height:240px;image-rendering:pixelated;border:1px solid #ddd;
 </body></html>`))
 
 var dashHistoryTmpl = template.Must(template.New("dashHistory").Parse(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>{{ .CustomerJID }} — Chalagente</title>
-<style>
-body{font-family:system-ui,sans-serif;max-width:760px;margin:0 auto;padding:1rem;color:#222;line-height:1.5;background:#ece5dd}
+` + layout.FaviconLink + `
+` + layout.FontsLink + `
+<style>` + layout.SharedStyles + layout.ChatPaneStyles + `
+.wrap{max-width:760px;margin:1.5rem auto;padding:0 1rem}
 .crumbs{font-size:.85em;margin-bottom:.5rem}
-.crumbs a{color:#075e54;text-decoration:none}
+.crumbs a{color:var(--terracotta-deep);text-decoration:none}
 .crumbs a:hover{text-decoration:underline}
-h1{margin:.2rem 0 .8rem;font-size:1.4rem;color:#075e54}
-.meta{font-size:.85em;color:#555;margin-bottom:.5rem}
-.chat{display:flex;flex-direction:column;gap:.35rem;padding:1rem;background:#ece5dd;border-radius:6px}
-.bubble{max-width:80%;padding:.5rem .7rem;border-radius:10px;font-size:.95rem;color:#222;box-shadow:0 1px 1px rgba(0,0,0,.08);word-wrap:break-word}
-.bubble.in{background:white;align-self:flex-start;border-bottom-left-radius:2px}
-.bubble.out{background:#dcf8c6;align-self:flex-end;border-bottom-right-radius:2px}
-.bubble .when{display:block;color:#888;font-size:.7em;margin-top:.2rem}
-.bubble .kindbadge{display:inline-block;font-size:.7em;color:#555;background:rgba(0,0,0,.05);border-radius:3px;padding:1px 5px;margin-right:.3rem;text-transform:uppercase;letter-spacing:.05em}
-.empty{padding:2rem;text-align:center;color:#666}
-.note{color:#555;font-size:.85em;margin-top:.8rem;text-align:center}
+.headline{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:.6rem}
+.headline h1{margin:0;font-size:1.4rem}
+.meta{font-size:.85em;color:var(--muted);margin:0}
+.empty{padding:2rem;text-align:center;color:var(--muted)}
+.note{color:var(--muted);font-size:.85em;margin-top:.8rem;text-align:center}
 </style></head><body>
-<div class="crumbs"><a href="/admin">← Conversaciones</a></div>
-<h1>{{ .CustomerJID }}</h1>
-<p class="meta">{{ .Total }} mensaje{{ if ne .Total 1 }}s{{ end }} · solo lectura</p>
-<div class="chat">
-{{ range .Messages }}
- <div class="bubble {{ .Direction }}">
-  {{ if ne .Kind "text" }}<span class="kindbadge">{{ .Kind }}</span>{{ end }}{{ .Body }}
-  <span class="when">{{ .Time.Format "2006-01-02 15:04" }}</span>
+<div class="wrap">
+ <div class="crumbs"><a href="/admin">← Conversaciones</a></div>
+ <div class="headline">
+  <h1>{{ .CustomerJID }}</h1>
+  <p class="meta">{{ .Total }} mensaje{{ if ne .Total 1 }}s{{ end }} · solo lectura</p>
  </div>
-{{ else }}
- <div class="empty">Aún no hay mensajes en este chat.</div>
-{{ end }}
+ <div class="chatpane from-business">
+  <div class="phead">
+   <div class="avatar">{{ slice .CustomerJID 0 1 }}</div>
+   <div><div class="name">{{ .CustomerJID }}</div><div class="sub">historial · sólo lectura</div></div>
+  </div>
+  <div class="chat">
+   {{ range .Messages }}
+    <div class="bubble {{ if eq .Direction "out" }}out{{ else }}in{{ end }}">
+     {{ if ne .Kind "text" }}<span class="kindbadge">{{ .Kind }}</span>{{ end }}{{ .Body }}
+     <span class="when">{{ .Time.Format "2006-01-02 15:04" }}</span>
+    </div>
+   {{ else }}
+    <div class="empty">Aún no hay mensajes en este chat.</div>
+   {{ end }}
+  </div>
+ </div>
+ {{ if .Truncated }}<p class="note">Mostrando los últimos {{ .Total }} mensajes — el historial más antiguo está guardado pero no se muestra aquí.</p>{{ end }}
 </div>
-{{ if .Truncated }}<p class="note">Mostrando los últimos {{ .Total }} mensajes — el historial más antiguo está guardado pero no se muestra aquí.</p>{{ end }}
 </body></html>`))
 
 var dashBusinessTmpl = template.Must(template.New("dashBusiness").Parse(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Información — Chalagente</title>
