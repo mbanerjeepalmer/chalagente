@@ -13,9 +13,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	"github.com/mbanerjeepalmer/chalagente/internal/agent"
+
+	"go.mau.fi/whatsmeow"
 	"github.com/mbanerjeepalmer/chalagente/internal/clerkauth"
 	"github.com/mbanerjeepalmer/chalagente/internal/maps"
 	"github.com/mbanerjeepalmer/chalagente/internal/store"
@@ -646,6 +649,40 @@ func TestOnboardingFinishLandsOnAdminConnection(t *testing.T) {
 	}
 	if !strings.Contains(loc, "hint=biz") {
 		t.Errorf("expected hint=biz in redirect target, got %q", loc)
+	}
+}
+
+func TestPairingQRRefreshCap(t *testing.T) {
+	a := newTestApp(t)
+	_, cancel := context.WithCancel(context.Background())
+	a.setPairSession("biz-cap", &pairSession{cancel: cancel})
+
+	ch := make(chan whatsmeow.QRChannelItem, 8)
+	// Send pairQRMaxAuto+1 codes — the cap should kick in on the 4th.
+	for i := 0; i < pairQRMaxAuto+1; i++ {
+		ch <- whatsmeow.QRChannelItem{Event: "code", Code: "qr-" + first(string(rune('a'+i)), 1)}
+	}
+	close(ch)
+
+	done := make(chan struct{})
+	go func() { a.drivePairing("biz-cap", ch); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("drivePairing didn't exit after cap")
+	}
+
+	sess := a.getPairSession("biz-cap")
+	if sess == nil {
+		t.Fatal("pair session went missing")
+	}
+	sess.mu.Lock()
+	defer sess.mu.Unlock()
+	if !sess.needsManual {
+		t.Errorf("expected needsManual=true after %d codes, got false (codeCount=%d)", pairQRMaxAuto+1, sess.codeCount)
+	}
+	if sess.event != "needs_manual" {
+		t.Errorf("event = %q, want needs_manual", sess.event)
 	}
 }
 

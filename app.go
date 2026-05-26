@@ -51,7 +51,20 @@ type pairSession struct {
 	deviceJID string
 	done      bool
 	cancel    context.CancelFunc
+	// codeCount counts how many "code" events whatsmeow has emitted on
+	// this session — each one is a refreshed QR. After pairQRMaxAuto
+	// codes the goroutine stops auto-refreshing and the UI prompts the
+	// user to press "Regenerar QR" (which calls /start again, opening a
+	// fresh session).
+	codeCount     int
+	needsManual   bool
 }
+
+// pairQRMaxAuto caps how many times the pairing QR auto-refreshes itself
+// before the user has to manually request a fresh code. WhatsApp issues a
+// new code roughly every 20s; three codes = ~1 minute of un-scanned QR,
+// after which we assume the page is sitting idle and stop spamming codes.
+const pairQRMaxAuto = 3
 
 // userIDFrom returns the authenticated local user id injected by the
 // Clerk middleware.
