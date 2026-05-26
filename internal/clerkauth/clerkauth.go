@@ -283,18 +283,96 @@ var clerkPageTmpl = template.Must(template.New("clerk").Parse(`<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}} · Chalagente</title>
+  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23b5482e'/><text x='50%25' y='54%25' text-anchor='middle' dominant-baseline='middle' font-family='Georgia,serif' font-size='42' font-weight='700' fill='%23faf6ea'>C</text></svg>">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    body { font-family: system-ui, -apple-system, sans-serif; margin: 0;
-           min-height: 100vh; display: flex; flex-direction: column;
-           align-items: center; justify-content: center; background: #faf6ef; }
-    h1 { font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 500;
-         color: #1a1a1a; margin-bottom: 1rem; }
-    #clerk-mount { min-height: 480px; min-width: 320px; }
+    :root {
+      --wall:#f1ead9; --wall-shade:#e6dec7; --bone:#faf6ea;
+      --ink:#1c1a16; --ink-soft:#3a352c; --muted:#6b6354; --line:rgba(28,26,22,0.14);
+      --terracotta:#b5482e; --terracotta-deep:#8a3320;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;min-height:100vh}
+    body{
+      font-family:"Inter","Helvetica Neue",Helvetica,Arial,sans-serif;
+      background:var(--wall);
+      background-image:
+        radial-gradient(rgba(110,90,60,0.05) 1px, transparent 1px),
+        linear-gradient(180deg,var(--wall),var(--wall-shade));
+      background-size:3px 3px,100% 100%;
+      color:var(--ink-soft); line-height:1.55;
+      display:flex; flex-direction:column;
+    }
+    header.nav{
+      position:sticky; top:0; z-index:10;
+      background:rgba(241,234,217,0.92); backdrop-filter:blur(6px);
+      border-bottom:1px solid var(--line);
+    }
+    .nav-inner{display:flex;align-items:center;justify-content:space-between;
+      max-width:1080px;margin:0 auto;padding:1rem 1.5rem}
+    .logo{display:flex;align-items:center;gap:.6rem;
+      font-family:"Cormorant Garamond",Georgia,serif;font-weight:700;font-size:1.35rem;
+      color:var(--ink);text-decoration:none}
+    .logo-mark{width:30px;height:30px;border-radius:50%;background:var(--terracotta);
+      display:grid;place-items:center;color:var(--bone);
+      font-family:"Cormorant Garamond",serif;font-weight:700;font-size:1rem;
+      box-shadow:inset 0 -2px 0 rgba(0,0,0,0.15)}
+    main.shell{
+      flex:1; display:flex; align-items:center; justify-content:center;
+      padding:2rem 1.25rem;
+    }
+    .auth-frame{
+      display:flex; flex-direction:column; align-items:center; gap:1.25rem;
+      width:100%; max-width:480px;
+    }
+    h1.heading{
+      font-family:"Cormorant Garamond",Georgia,serif; font-weight:600;
+      color:var(--ink); margin:0; text-align:center;
+      font-size:clamp(1.8rem, 3vw, 2.4rem); letter-spacing:-0.005em; line-height:1.15;
+      /* Reserve vertical space so the Cormorant swap doesn't reflow the page. */
+      min-height:2.6rem;
+    }
+    /*
+     * #clerk-mount reserves the typical size of Clerk's <SignIn/> or
+     * <SignUp/> component so the widget doesn't shift layout when it
+     * mounts in. The skeleton inside is a placeholder that gets removed
+     * just before Clerk renders.
+     */
+    #clerk-mount{
+      width:100%; min-width:320px; min-height:480px;
+      display:flex; align-items:flex-start; justify-content:center;
+    }
+    .skeleton{
+      width:100%; min-height:480px;
+      background:var(--bone); border:1px solid var(--line); border-radius:10px;
+      box-shadow:0 1px 0 rgba(0,0,0,0.06), 0 12px 32px rgba(40,30,15,0.10);
+      padding:2rem; display:flex; flex-direction:column; gap:1rem;
+      animation:skel-fade 1.4s ease-in-out infinite alternate;
+    }
+    .skeleton .bar{background:rgba(28,26,22,0.08); border-radius:6px; height:14px}
+    .skeleton .bar.title{width:60%; height:20px; margin:.25rem auto 1rem}
+    .skeleton .bar.field{width:100%; height:42px}
+    .skeleton .bar.button{width:100%; height:42px; background:rgba(28,26,22,0.12); margin-top:1rem}
+    @keyframes skel-fade { 0%{opacity:.85} 100%{opacity:.55} }
   </style>
 </head>
 <body>
-  <h1>{{.Heading}}</h1>
-  <div id="clerk-mount"></div>
+  <header class="nav"><div class="nav-inner">
+    <a class="logo" href="/"><span class="logo-mark">C</span><span>Chalagente</span></a>
+  </div></header>
+  <main class="shell">
+    <div class="auth-frame">
+      <h1 class="heading">{{.Heading}}</h1>
+      <div id="clerk-mount">
+        <div class="skeleton" aria-hidden="true">
+          <div class="bar title"></div>
+          <div class="bar"></div>
+          <div class="bar field"></div>
+          <div class="bar button"></div>
+        </div>
+      </div>
+    </div>
+  </main>
   <script
     async
     crossorigin="anonymous"
@@ -311,9 +389,14 @@ var clerkPageTmpl = template.Must(template.New("clerk").Parse(`<!doctype html>
         return;
       }
       const mount = document.getElementById('clerk-mount');
+      // Drop the skeleton placeholder before Clerk injects its widget so we
+      // don't end up with both stacked.
+      mount.replaceChildren();
       const opts = {
-        afterSignInUrl: {{.AfterSignInURL}},
-        afterSignUpUrl: {{.AfterSignInURL}},
+        // Clerk 5 prefers fallbackRedirectUrl over the deprecated afterSign*Url.
+        fallbackRedirectUrl: {{.AfterSignInURL}},
+        signInFallbackRedirectUrl: {{.AfterSignInURL}},
+        signUpFallbackRedirectUrl: {{.AfterSignInURL}},
       };
       {{if eq .Mode "sign-up"}}
       window.Clerk.mountSignUp(mount, opts);
