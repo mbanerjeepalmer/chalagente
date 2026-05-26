@@ -235,6 +235,19 @@ func (a *App) drivePairing(bizID string, qrChan <-chan whatsmeow.QRChannelItem) 
 		sess.mu.Lock()
 		sess.event = evt.Event
 		if evt.Event == "code" {
+			sess.codeCount++
+			if sess.codeCount > pairQRMaxAuto {
+				// Cap reached. Cancel the underlying pairing context so
+				// whatsmeow stops issuing codes, mark the session as
+				// needing manual refresh, and exit the loop.
+				sess.needsManual = true
+				sess.event = "needs_manual"
+				if sess.cancel != nil {
+					sess.cancel()
+				}
+				sess.mu.Unlock()
+				return
+			}
 			sess.code = evt.Code
 		}
 		if evt.Event == "success" {
@@ -301,10 +314,12 @@ func (a *App) handleOnboardingPairStatus(w http.ResponseWriter, r *http.Request)
 	sess.mu.Lock()
 	defer sess.mu.Unlock()
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"state":      sess.event,
-		"has_qr":     sess.code != "",
-		"device_jid": sess.deviceJID,
-		"done":       sess.done,
+		"state":        sess.event,
+		"has_qr":       sess.code != "",
+		"device_jid":   sess.deviceJID,
+		"done":         sess.done,
+		"needs_manual": sess.needsManual,
+		"code_count":   sess.codeCount,
 	})
 }
 
@@ -436,10 +451,15 @@ var onbWATmpl = template.Must(template.New("onbWA").Parse(onbCommonCSS + `
 <div id="qrBox" style="display:none">
  <img id="qrImg" src="" alt="QR" style="width:256px;height:256px;image-rendering:pixelated;border:1px solid #ccc">
  <p id="status" class="muted">Esperando QR…</p>
+ <div id="manualBox" style="display:none;margin-top:.5rem">
+  <p style="color:#a16207;font-size:.9em">El QR caducó después de varios intentos sin escanear. Genera uno nuevo:</p>
+  <button onclick="startPairing()">Regenerar QR</button>
+ </div>
 </div>
 <script>
 async function startPairing() {
  document.getElementById('startBtn').disabled = true;
+ document.getElementById('manualBox').style.display = 'none';
  const r = await fetch('/onboarding/whatsapp/start', {method:'POST'});
  if (!r.ok) { document.getElementById('status').textContent = 'Error: ' + r.status; return; }
  document.getElementById('qrBox').style.display = 'block';
@@ -452,6 +472,11 @@ async function poll() {
   document.getElementById('status').textContent = 'Estado: ' + (s.state || 'pendiente');
   if (s.has_qr) document.getElementById('qrImg').src = '/onboarding/whatsapp/qr.png?ts=' + Date.now();
   if (s.done) { window.location = '/onboarding/test'; return; }
+  if (s.needs_manual) {
+   document.getElementById('manualBox').style.display = 'block';
+   document.getElementById('status').textContent = 'QR caducado — pulsa Regenerar QR';
+   return;
+  }
  } catch (e) { console.error(e); }
  setTimeout(poll, 1500);
 }
