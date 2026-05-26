@@ -125,6 +125,12 @@ ALTER TABLE businesses ADD COLUMN trigger_required INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE businesses ADD COLUMN wa_prefill_template TEXT NOT NULL DEFAULT '';
 `,
 	},
+	{
+		name: "0005_wa_prefill_translations",
+		sql: `
+ALTER TABLE businesses ADD COLUMN wa_prefill_translations TEXT NOT NULL DEFAULT '{}';
+`,
+	},
 }
 
 // runMigrations applies any pending migrations, in order. It creates the

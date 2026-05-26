@@ -59,6 +59,13 @@ func main() {
 	app.Store = appStore
 	app.WAMgr = wam
 	app.Agent = buildAgent()
+	// The translator is a thin closure over app.Agent — buildAgent already
+	// owns the Bedrock→Mistral→Mock fallback chain, so we don't introduce
+	// a second LLM hierarchy. When only MockEngine is available the JSON
+	// parse will fail and the dashboard will skip translations; the
+	// /go/<id> redirect falls back to the source template, which is what
+	// we want in dev/test.
+	app.Translator = agentTranslator(app.Agent)
 	app.Voice = voice.NewCachedProvider(&voice.MockProvider{}, 256)
 	app.Maps = maps.DefaultMockClient()
 	app.BaseURL = baseURL

@@ -15,13 +15,14 @@ import (
 )
 
 type App struct {
-	Store     *store.Store
-	WAMgr     *wamanager.Manager
-	Agent     agent.Engine
-	Voice     voice.Provider
-	Maps      maps.Client
-	ClerkAuth *clerkauth.Handlers
-	BaseURL   string
+	Store      *store.Store
+	WAMgr      *wamanager.Manager
+	Agent      agent.Engine
+	Voice      voice.Provider
+	Maps       maps.Client
+	Translator Translator
+	ClerkAuth  *clerkauth.Handlers
+	BaseURL    string
 
 	busMu  sync.Mutex
 	recent map[string][]Event

@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -133,6 +134,11 @@ type Business struct {
 	// "{business}" placeholder which is substituted with the business name
 	// at render time. Empty means "use the built-in default".
 	WAPrefillTemplate string
+	// WAPrefillTranslations maps BCP-47-ish language codes (e.g. "en", "es",
+	// "pt") to the LLM-translated version of WAPrefillTemplate. The redirect
+	// handler uses Accept-Language to pick the best match; falls back to
+	// WAPrefillTemplate when no entry matches.
+	WAPrefillTranslations map[string]string
 	VoiceMode    string // "auto" | "always" | "never"
 	VoiceID      string
 	CreatedAt    time.Time
@@ -446,8 +452,9 @@ func (s *Store) CreateBusiness(ctx context.Context, userID string) (Business, er
 		`INSERT INTO businesses(
 			id, user_id, name, maps_place_id, address, phone, hours, categories,
 			website, extra_info, wa_device_jid, agent_enabled, trigger_required,
-			wa_prefill_template, voice_mode, voice_id, created_at, updated_at
-		) VALUES(?, ?, '', NULL, '', '', '', '', '', '', NULL, 1, 1, '', 'auto', NULL, ?, ?)`,
+			wa_prefill_template, wa_prefill_translations, voice_mode, voice_id,
+			created_at, updated_at
+		) VALUES(?, ?, '', NULL, '', '', '', '', '', '', NULL, 1, 1, '', '{}', 'auto', NULL, ?, ?)`,
 		b.ID, b.UserID,
 		b.CreatedAt.Format(time.RFC3339Nano),
 		b.UpdatedAt.Format(time.RFC3339Nano),
@@ -460,24 +467,26 @@ func (s *Store) CreateBusiness(ctx context.Context, userID string) (Business, er
 
 const businessCols = `id, user_id, name, maps_place_id, address, phone, hours,
 	categories, website, extra_info, wa_device_jid, agent_enabled,
-	trigger_required, wa_prefill_template, voice_mode, voice_id,
-	created_at, updated_at`
+	trigger_required, wa_prefill_template, wa_prefill_translations,
+	voice_mode, voice_id, created_at, updated_at`
 
 func scanBusiness(row *sql.Row) (Business, error) {
 	var b Business
 	var (
-		mapsPlaceID sql.NullString
-		waDeviceJID sql.NullString
-		voiceID     sql.NullString
-		agentInt    int
-		triggerInt  int
-		createdAt   string
-		updatedAt   string
+		mapsPlaceID  sql.NullString
+		waDeviceJID  sql.NullString
+		voiceID      sql.NullString
+		agentInt     int
+		triggerInt   int
+		translations string
+		createdAt    string
+		updatedAt    string
 	)
 	err := row.Scan(
 		&b.ID, &b.UserID, &b.Name, &mapsPlaceID, &b.Address, &b.Phone,
 		&b.Hours, &b.Categories, &b.Website, &b.ExtraInfo, &waDeviceJID,
-		&agentInt, &triggerInt, &b.WAPrefillTemplate, &b.VoiceMode, &voiceID, &createdAt, &updatedAt,
+		&agentInt, &triggerInt, &b.WAPrefillTemplate, &translations,
+		&b.VoiceMode, &voiceID, &createdAt, &updatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Business{}, ErrNotFound
@@ -490,6 +499,11 @@ func scanBusiness(row *sql.Row) (Business, error) {
 	b.VoiceID = voiceID.String
 	b.AgentEnabled = agentInt != 0
 	b.TriggerRequired = triggerInt != 0
+	if translations != "" && translations != "{}" {
+		if err := json.Unmarshal([]byte(translations), &b.WAPrefillTranslations); err != nil {
+			return Business{}, fmt.Errorf("decode translations: %w", err)
+		}
+	}
 	b.CreatedAt = parseTime(createdAt)
 	b.UpdatedAt = parseTime(updatedAt)
 	return b, nil
@@ -531,18 +545,27 @@ func (s *Store) UpdateBusiness(ctx context.Context, b Business) error {
 		triggerInt = 1
 	}
 	updated := time.Now().UTC()
+	translationsJSON := "{}"
+	if len(b.WAPrefillTranslations) > 0 {
+		raw, err := json.Marshal(b.WAPrefillTranslations)
+		if err != nil {
+			return fmt.Errorf("encode translations: %w", err)
+		}
+		translationsJSON = string(raw)
+	}
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE businesses SET
 			name = ?, maps_place_id = ?, address = ?, phone = ?, hours = ?,
 			categories = ?, website = ?, extra_info = ?, wa_device_jid = ?,
 			agent_enabled = ?, trigger_required = ?, wa_prefill_template = ?,
-			voice_mode = ?, voice_id = ?, updated_at = ?
+			wa_prefill_translations = ?, voice_mode = ?, voice_id = ?,
+			updated_at = ?
 		WHERE id = ?`,
 		b.Name,
 		nullableString(b.MapsPlaceID),
 		b.Address, b.Phone, b.Hours, b.Categories, b.Website, b.ExtraInfo,
 		nullableString(b.WADeviceJID),
-		agentInt, triggerInt, b.WAPrefillTemplate, b.VoiceMode,
+		agentInt, triggerInt, b.WAPrefillTemplate, translationsJSON, b.VoiceMode,
 		nullableString(b.VoiceID),
 		updated.Format(time.RFC3339Nano),
 		b.ID,
