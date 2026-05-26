@@ -250,6 +250,57 @@ func (a *App) refreshPrefillTranslations(ctx context.Context, b store.Business) 
 	return a.Translator(ctx, source, supportedPrefillLangs)
 }
 
+// helpTranslations are the four languages we render on the printed QR
+// alongside the business name. Spanish first (host country), then English,
+// Mandarin, Hindi. Used by /admin/connection's print view.
+var helpTranslations = []struct{ Lang, Word string }{
+	{"es", "Ayuda"},
+	{"en", "Help"},
+	{"zh", "帮助"},
+	{"hi", "सहायता"},
+}
+
+type connectionView struct {
+	Business        store.Business
+	ShareURL        string
+	WAMeURL         string
+	PrefillResolved string
+	HelpWords       []struct{ Lang, Word string }
+	Connected       bool
+	LoggedIn        bool
+	Paired          bool
+	Flash           string
+}
+
+// handleAdminConnection renders /admin/connection — the dedicated WhatsApp
+// connection panel. Bundles the share QR (with download + print actions),
+// the keyword-required toggle, the multilingual print layout and the
+// destructive disconnect button. The main /admin dashboard keeps the same
+// affordances for now so this screen is purely additive; a follow-up will
+// trim the dashboard.
+func (a *App) handleAdminConnection(w http.ResponseWriter, r *http.Request) {
+	b, ok := a.requireBusiness(w, r)
+	if !ok {
+		return
+	}
+	status := waStatusFor(a, b.ID)
+	view := connectionView{
+		Business:        b,
+		ShareURL:        a.businessShareURL(b),
+		WAMeURL:         businessShareTarget(b, ""),
+		PrefillResolved: resolvePrefill(b),
+		HelpWords:       helpTranslations,
+		Connected:       status.Connected,
+		LoggedIn:        status.LoggedIn,
+		Paired:          b.WADeviceJID != "",
+		Flash:           r.URL.Query().Get("flash"),
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := connectionTmpl.Execute(w, view); err != nil {
+		log.Printf("connectionTmpl: %v", err)
+	}
+}
+
 // handleShareRedirect is the public /go/{id} endpoint. It looks up the
 // business, resolves their current prefill text against the latest business
 // name + keyword setting, and 302s the visitor at the matching wa.me link.
@@ -591,6 +642,7 @@ form{display:inline}
 <h1>{{ .Business.Name }}</h1>
 <nav class="tabs">
  <a href="/admin" class="active">Conversaciones</a>
+ <a href="/admin/connection">Conexión</a>
  <a href="/admin/business">Información</a>
 </nav>
 {{ if .Flash }}<div class="flash">{{ .Flash }}</div>{{ end }}
@@ -708,6 +760,117 @@ async function bootClerkButton() {
 {{ end }}
 </body></html>`))
 
+var connectionTmpl = template.Must(template.New("connection").Parse(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Conexión — Chalagente</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:920px;margin:1.5rem auto;padding:0 1rem;color:#222;line-height:1.5}
+h1{margin-top:0}
+h2{margin:.4rem 0 .8rem;font-size:1.05rem}
+nav.tabs{display:flex;gap:.5rem;margin-bottom:1.5rem;border-bottom:1px solid #ddd}
+nav.tabs a{padding:.5rem 1rem;text-decoration:none;color:#555;border-bottom:2px solid transparent}
+nav.tabs a.active{color:#25d366;border-bottom-color:#25d366;font-weight:600}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+@media(max-width:760px){.grid{grid-template-columns:1fr}}
+.card{border:1px solid #ddd;border-radius:8px;padding:1.2rem;margin-bottom:1rem;background:#fff}
+.status{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.85em}
+.ok{background:#d1fadf;color:#054f31}.bad{background:#fde2e1;color:#6e1d1a}
+.flash{background:#eef;border:1px solid #99c;padding:.5rem;border-radius:4px;margin-bottom:1rem}
+button,.btn{padding:.5rem .9rem;border-radius:4px;border:1px solid #bbb;background:#f5f5f5;cursor:pointer;font-size:.9em;font-family:inherit;text-decoration:none;color:#222;display:inline-block}
+button.primary,.btn.primary{background:#25d366;color:white;border-color:#1f9c4d;font-weight:600}
+button.danger{background:#c0392b;color:white;border-color:#922b21;font-weight:600}
+form{display:inline}
+.qrwrap{text-align:center}
+img.qr{width:240px;height:240px;image-rendering:pixelated;border:1px solid #ddd;background:#fff}
+.qractions{display:flex;gap:.5rem;justify-content:center;margin-top:.6rem;flex-wrap:wrap}
+.preview{font-size:.85em;font-style:italic;background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:.4rem .6rem;margin:.4rem 0}
+.url{font-family:ui-monospace,Menlo,monospace;font-size:.78em;color:#777;word-break:break-all}
+.warn{background:#fff7e6;border-left:4px solid #d39e00;padding:.6rem .8rem;border-radius:4px;font-size:.88em;margin-top:.6rem}
+.printable{display:none}
+@media print {
+ body{margin:0;padding:0;max-width:none}
+ nav.tabs,.no-print,.flash{display:none}
+ .printable{display:block;padding:2.5rem;text-align:center;page-break-inside:avoid}
+ .printable h1{font-family:"Cormorant Garamond",Georgia,serif;font-size:2.4rem;margin:0 0 1.5rem;color:#1c1a16}
+ .printable img.qr{width:380px;height:380px;border:none}
+ .printable .helps{margin-top:1.5rem;display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;font-size:1.2rem}
+ .printable .helps div{padding:.4rem}
+ .printable .scan{font-size:1rem;color:#444;margin-top:1rem}
+}
+</style></head><body>
+<nav class="tabs">
+ <a href="/admin">Conversaciones</a>
+ <a href="/admin/connection" class="active">Conexión</a>
+ <a href="/admin/business">Información</a>
+</nav>
+{{ if .Flash }}<div class="flash">{{ .Flash }}</div>{{ end }}
+<h1>Conexión de WhatsApp</h1>
+<div class="grid no-print">
+ <div class="card">
+  <h2>Estado</h2>
+  <p>
+   <strong>WhatsApp:</strong>
+   {{ if .LoggedIn }}<span class="status ok">vinculado</span>{{ else }}<span class="status bad">desvinculado</span>{{ end }}
+   {{ if .Connected }}<span class="status ok">conectado</span>{{ else }}<span class="status bad">desconectado</span>{{ end }}
+  </p>
+  {{ if .Paired }}
+   <p class="url">{{ .Business.WADeviceJID }}</p>
+   <form method="POST" action="/admin/whatsapp/unpair"
+         onsubmit="return confirm('¿Desvincular WhatsApp?\n\nEsto BORRARÁ todo tu historial de chats de chalagente.com. Tu WhatsApp no se toca — los mensajes siguen en tu teléfono.\n\nTendrás que escanear el QR otra vez para volver a conectar.');">
+    <button class="danger" type="submit">Desvincular WhatsApp y borrar historial</button>
+   </form>
+   <p class="warn"><strong>Atención:</strong> al desvincular se borra todo tu historial de Chalagente. WhatsApp en tu teléfono no se ve afectado.</p>
+  {{ else }}
+   <p>Aún no has conectado un número. Pasa por la <a href="/onboarding/whatsapp">vinculación</a> para escanear un QR.</p>
+  {{ end }}
+ </div>
+ <div class="card">
+  <h2>Palabra clave</h2>
+  <p style="margin:.2rem 0 .6rem">
+   {{ if .Business.TriggerRequired }}
+    Chalagente responde sólo cuando alguien menciona la palabra «Chalagente». Una vez mencionada en un chat, sigue respondiendo en esa conversación.
+   {{ else }}
+    Chalagente responde a <strong>todos</strong> los mensajes entrantes.
+   {{ end }}
+  </p>
+  <form method="POST" action="/admin/trigger">
+   {{ if .Business.TriggerRequired }}
+    <input type="hidden" name="required" value="0"><button type="submit">Quitar palabra clave</button>
+   {{ else }}
+    <input type="hidden" name="required" value="1"><button class="primary" type="submit">Exigir «Chalagente»</button>
+   {{ end }}
+  </form>
+ </div>
+</div>
+{{ if .Paired }}
+<div class="card no-print">
+ <h2>Comparte tu QR</h2>
+ <div class="grid">
+  <div class="qrwrap">
+   <img id="shareqr" class="qr" src="/admin/qr.png">
+   <div class="qractions">
+    <a class="btn" href="/admin/qr.png" download="chalagente-{{ .Business.ID }}.png">Descargar PNG</a>
+    <button class="btn" type="button" onclick="window.print()">Imprimir</button>
+   </div>
+  </div>
+  <div>
+   <p style="margin:0 0 .4rem;font-size:.9em;color:#555">Cuando un cliente escanea, entra a WhatsApp con este mensaje precargado:</p>
+   <div class="preview">{{ .PrefillResolved }}</div>
+   <p class="url">QR: <a href="{{ .ShareURL }}">{{ .ShareURL }}</a></p>
+   <p class="url">→ <a href="{{ .WAMeURL }}">{{ .WAMeURL }}</a></p>
+   <p style="font-size:.85em;color:#555;margin-top:.6rem">Personaliza el mensaje precargado en <a href="/admin/business">Información del negocio</a>.</p>
+  </div>
+ </div>
+</div>
+<div class="printable">
+ <h1>{{ .Business.Name }}</h1>
+ <img class="qr" src="/admin/qr.png">
+ <p class="scan">Escanea el código con tu WhatsApp</p>
+ <div class="helps">
+  {{ range .HelpWords }}<div><strong>{{ .Word }}</strong></div>{{ end }}
+ </div>
+</div>
+{{ end }}
+</body></html>`))
+
 var dashHistoryTmpl = template.Must(template.New("dashHistory").Parse(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>{{ .CustomerJID }} — Chalagente</title>
 <style>
 body{font-family:system-ui,sans-serif;max-width:760px;margin:0 auto;padding:1rem;color:#222;line-height:1.5;background:#ece5dd}
@@ -754,6 +917,7 @@ button{padding:.6rem 1rem;font-size:1rem;border-radius:4px;border:1px solid #bbb
 </style></head><body>
 <nav class="tabs">
  <a href="/admin">Conversaciones</a>
+ <a href="/admin/connection">Conexión</a>
  <a href="/admin/business" class="active">Información</a>
 </nav>
 <h1>Información del negocio</h1>

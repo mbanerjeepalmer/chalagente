@@ -455,6 +455,53 @@ func TestShareRedirectPicksTranslationFromAcceptLanguage(t *testing.T) {
 	}
 }
 
+func TestAdminConnectionScreen(t *testing.T) {
+	a := newTestApp(t)
+	srv := httptest.NewServer(a.Mux())
+	defer srv.Close()
+
+	jar, _ := cookiejar.New(nil)
+	signInAs(t, a, jar, srv, "clerk-conn")
+	u, _ := a.Store.GetUserByEmail(context.Background(), "clerk-conn@example.com")
+	biz, err := a.Store.CreateBusiness(context.Background(), u.ID)
+	if err != nil {
+		t.Fatalf("CreateBusiness: %v", err)
+	}
+	biz.Name = "Café Conexión"
+	biz.WADeviceJID = "5215512345678:1@s.whatsapp.net"
+	if err := a.Store.UpdateBusiness(context.Background(), biz); err != nil {
+		t.Fatalf("UpdateBusiness: %v", err)
+	}
+
+	client := &http.Client{Jar: jar}
+	res, err := client.Get(srv.URL + "/admin/connection")
+	if err != nil {
+		t.Fatalf("GET connection: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("status: %d", res.StatusCode)
+	}
+	body, _ := io.ReadAll(res.Body)
+	for _, want := range []string{
+		"Conexión de WhatsApp",
+		"Descargar PNG",
+		"window.print()",
+		"Ayuda",
+		"Help",
+		"帮助",
+		"सहायता",
+		"/admin/qr.png",
+		"/admin/whatsapp/unpair",
+		"/admin/trigger",
+		"Café Conexión",
+	} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("connection screen missing %q in body: %s", want, first(string(body), 600))
+		}
+	}
+}
+
 func TestLegacyAppPathsRedirectToAdmin(t *testing.T) {
 	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
