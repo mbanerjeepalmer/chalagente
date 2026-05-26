@@ -291,6 +291,44 @@ func (a *App) handleTrySend(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
+// presetVoicePrompt is the demo's signature first-message phrase — the
+// French question a visitor "asks" by hitting the prefilled voice-note
+// button. Stays in French so the agent's reply uses the multilingual
+// behaviour the demo is supposed to show off.
+const presetVoicePrompt = "Bonjour, qu'est-ce que la birria ?"
+
+// presetVoiceLang controls which ElevenLabs voice handles the synth — the
+// pipeline's voiceIDForLang helper maps this back to ELEVENLABS_VOICE_FR
+// in prod, the multilingual default otherwise.
+const presetVoiceLang = "fr"
+
+// handleTryPresetAudio returns the audio bytes for the prefilled voice
+// note. The voice provider's cache (NewCachedProvider wraps the real
+// ElevenLabs client in main.go) means subsequent requests hit memory, not
+// the network. When no API key is configured the MockProvider returns an
+// empty audio buffer and we serve a 404 so the JS falls back to the text
+// flow gracefully.
+func (a *App) handleTryPresetAudio(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	syn, err := a.Voice.Synthesize(ctx, presetVoicePrompt, voiceIDForLang(presetVoiceLang))
+	if err != nil {
+		http.Error(w, "synth: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	if len(syn.Audio) == 0 {
+		http.Error(w, "no audio", http.StatusNotFound)
+		return
+	}
+	mime := syn.MimeType
+	if mime == "" {
+		mime = "audio/ogg"
+	}
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Cache-Control", "public, max-age=600")
+	_, _ = w.Write(syn.Audio)
+}
+
 func (a *App) handleTryHistory(w http.ResponseWriter, r *http.Request) {
 	ses := a.trySessionFor(w, r)
 	ses.mu.Lock()
@@ -359,6 +397,10 @@ body{background-size: 3px 3px, 100% 100%}
  * layout.ChatPaneStyles at the top of this style block. */
 .chatpane{min-height:560px}
 .composer{display:flex;gap:.5rem;padding:.6rem .8rem;background:#f0f0f0;border-top:1px solid #ccc}
+.preset-row{padding:.4rem .8rem .55rem;background:#f0f0f0;border-top:1px solid #e0e0e0;text-align:center}
+.preset-btn{background:transparent;border:1px solid var(--terracotta);color:var(--terracotta-deep);border-radius:18px;padding:.35rem .9rem;font-size:.82rem;font-family:inherit;cursor:pointer}
+.preset-btn:hover{background:rgba(181,72,46,0.08)}
+.preset-btn:disabled{opacity:.6;cursor:wait}
 .composer input[type=text]{flex:1;padding:.55rem .9rem;border:none;border-radius:18px;font-size:.95rem;font-family:"Inter",sans-serif}
 .composer button{border:none;border-radius:50%;width:42px;height:42px;background:#25d366;color:white;font-size:1.2rem;cursor:pointer}
 .composer .audiobtn{background:#075e54}
@@ -410,6 +452,9 @@ body{background-size: 3px 3px, 100% 100%}
    <input type="text" id="text" value="Bonjour, qu'est-ce que la birria ?" placeholder="Escribe como si fueras un cliente" autocomplete="off">
    <button type="submit" title="Enviar">➤</button>
   </form>
+  <div class="preset-row" id="presetRow">
+   <button type="button" class="preset-btn" id="presetBtn" onclick="sendPresetVoice()" title="Mandar como nota de voz">▶ Enviar como nota de voz</button>
+  </div>
   <div class="cta-footer" id="ctaFoot">
    <span>¿Te gusta cómo responde?</span>
    <a href="/sign-up">Conecta tu WhatsApp →</a>
@@ -499,6 +544,37 @@ function onAfterSend(){
  sentCount++;
  if (sentCount === 1 && !bizEdited) highlightBusiness();
  if (sentCount >= 2 && bizEdited) highlightSignup();
+}
+
+// sendPresetVoice fetches the server-synthesized French preset audio and
+// posts it through the existing voice-note path, so the visitor sees
+// (and hears) the same flow a real customer would. In dev without an
+// ElevenLabs key the preset endpoint 404s and we fall back to sending
+// the same text via sendText so the demo still works.
+async function sendPresetVoice(){
+ const btn = document.getElementById('presetBtn');
+ const row = document.getElementById('presetRow');
+ btn.disabled = true;
+ try {
+  const audioRes = await fetch('/demo/preset.ogg');
+  if (!audioRes.ok) {
+   textInput.value = 'Bonjour, qu\'est-ce que la birria ?';
+   document.querySelector('.composer button[type=submit]').click();
+   return;
+  }
+  const blob = await audioRes.blob();
+  bubble('in', '🎙 [nota de voz]', null, null, 'audio');
+  const fd = new FormData();
+  fd.append('audio', blob, 'preset.ogg');
+  const r = await fetch('/demo/send', {method:'POST', body: fd});
+  if (!r.ok) { bubble('out', '[error '+r.status+']'); return; }
+  const d = await r.json();
+  if (d.transcript) bubble('out', '(transcripción: ' + d.transcript + ')');
+  bubble('out', d.reply, d.audio_b64, d.audio_mime);
+  onAfterSend();
+ } finally {
+  row.style.display = 'none';
+ }
 }
 
 async function saveBiz(ev) {

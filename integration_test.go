@@ -652,6 +652,41 @@ func TestOnboardingFinishLandsOnAdminConnection(t *testing.T) {
 	}
 }
 
+func TestDemoPresetVoiceNote(t *testing.T) {
+	a := newTestApp(t)
+	srv := httptest.NewServer(a.Mux())
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/demo/preset.ogg")
+	if err != nil {
+		t.Fatalf("GET preset: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("status: %d", res.StatusCode)
+	}
+	if ct := res.Header.Get("Content-Type"); !strings.HasPrefix(ct, "audio/") {
+		t.Errorf("content-type %q, want audio/*", ct)
+	}
+	body, _ := io.ReadAll(res.Body)
+	if len(body) == 0 {
+		t.Fatal("preset returned no bytes")
+	}
+
+	// The demo's HTML should expose the preset button so the visitor can fire it.
+	pageRes, err := http.Get(srv.URL + "/demo")
+	if err != nil {
+		t.Fatalf("GET demo: %v", err)
+	}
+	pageBody, _ := io.ReadAll(pageRes.Body)
+	pageRes.Body.Close()
+	for _, want := range []string{"presetBtn", "sendPresetVoice", "/demo/preset.ogg"} {
+		if !strings.Contains(string(pageBody), want) {
+			t.Errorf("demo page missing %q: %s", want, first(string(pageBody), 600))
+		}
+	}
+}
+
 func TestPairingQRRefreshCap(t *testing.T) {
 	a := newTestApp(t)
 	_, cancel := context.WithCancel(context.Background())
