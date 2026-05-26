@@ -502,6 +502,81 @@ func TestAdminConnectionScreen(t *testing.T) {
 	}
 }
 
+func TestConnectionScreenHintAfterOnboarding(t *testing.T) {
+	a := newTestApp(t)
+	srv := httptest.NewServer(a.Mux())
+	defer srv.Close()
+	jar, _ := cookiejar.New(nil)
+	signInAs(t, a, jar, srv, "clerk-hint")
+	u, _ := a.Store.GetUserByEmail(context.Background(), "clerk-hint@example.com")
+	biz, err := a.Store.CreateBusiness(context.Background(), u.ID)
+	if err != nil {
+		t.Fatalf("CreateBusiness: %v", err)
+	}
+	// Just paired, but business name still empty — the "Cuéntale de tu
+	// negocio" tooltip should auto-fire without an explicit ?hint param.
+	biz.WADeviceJID = "5215512345678:1@s.whatsapp.net"
+	if err := a.Store.UpdateBusiness(context.Background(), biz); err != nil {
+		t.Fatalf("UpdateBusiness: %v", err)
+	}
+
+	client := &http.Client{Jar: jar}
+	res, err := client.Get(srv.URL + "/admin/connection")
+	if err != nil {
+		t.Fatalf("GET connection: %v", err)
+	}
+	defer res.Body.Close()
+	body, _ := io.ReadAll(res.Body)
+	for _, want := range []string{`id="hint-biz"`, "cuéntale", `id="biz-tab"`} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("hint markup missing %q: %s", want, first(string(body), 600))
+		}
+	}
+
+	// Once the business name is set the auto-hint should stop firing.
+	biz.Name = "Café Listo"
+	if err := a.Store.UpdateBusiness(context.Background(), biz); err != nil {
+		t.Fatalf("UpdateBusiness 2: %v", err)
+	}
+	res2, err := client.Get(srv.URL + "/admin/connection")
+	if err != nil {
+		t.Fatalf("GET connection 2: %v", err)
+	}
+	defer res2.Body.Close()
+	body2, _ := io.ReadAll(res2.Body)
+	if strings.Contains(string(body2), `id="hint-biz"`) {
+		t.Errorf("hint shouldn't fire once name is set; body: %s", first(string(body2), 600))
+	}
+}
+
+func TestOnboardingFinishLandsOnAdminConnection(t *testing.T) {
+	a := newTestApp(t)
+	srv := httptest.NewServer(a.Mux())
+	defer srv.Close()
+	jar, _ := cookiejar.New(nil)
+	signInAs(t, a, jar, srv, "clerk-fin")
+
+	client := &http.Client{
+		Jar:           jar,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	res, err := client.PostForm(srv.URL+"/onboarding/finish", url.Values{})
+	if err != nil {
+		t.Fatalf("POST finish: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusSeeOther && res.StatusCode != http.StatusFound {
+		t.Fatalf("status: %d", res.StatusCode)
+	}
+	loc := res.Header.Get("Location")
+	if !strings.HasPrefix(loc, "/admin/connection") {
+		t.Errorf("expected /admin/connection redirect, got %q", loc)
+	}
+	if !strings.Contains(loc, "hint=biz") {
+		t.Errorf("expected hint=biz in redirect target, got %q", loc)
+	}
+}
+
 func TestLegacyAppPathsRedirectToAdmin(t *testing.T) {
 	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())

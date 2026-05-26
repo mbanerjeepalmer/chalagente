@@ -270,6 +270,11 @@ type connectionView struct {
 	LoggedIn        bool
 	Paired          bool
 	Flash           string
+	// HintTarget is the nav tab to attach a transition-in tooltip to, set
+	// either explicitly via ?hint=… or inferred from missing business info.
+	// Empty means no tooltip.
+	HintTarget  string // "biz" (Información) | ""
+	HintMessage string
 }
 
 // handleAdminConnection renders /admin/connection — the dedicated WhatsApp
@@ -284,6 +289,13 @@ func (a *App) handleAdminConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status := waStatusFor(a, b.ID)
+	hint := r.URL.Query().Get("hint")
+	// Auto-hint: after pairing, the business name is often still empty —
+	// pull the user toward the Información tab even without an explicit
+	// query param so the post-onboarding nudge fires reliably.
+	if hint == "" && b.WADeviceJID != "" && strings.TrimSpace(b.Name) == "" {
+		hint = "biz"
+	}
 	view := connectionView{
 		Business:        b,
 		ShareURL:        a.businessShareURL(b),
@@ -294,6 +306,10 @@ func (a *App) handleAdminConnection(w http.ResponseWriter, r *http.Request) {
 		LoggedIn:        status.LoggedIn,
 		Paired:          b.WADeviceJID != "",
 		Flash:           r.URL.Query().Get("flash"),
+	}
+	if hint == "biz" {
+		view.HintTarget = "biz"
+		view.HintMessage = "¡Ahora cuéntale a Chalagente de tu negocio!"
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := connectionTmpl.Execute(w, view); err != nil {
@@ -784,6 +800,10 @@ img.qr{width:240px;height:240px;image-rendering:pixelated;border:1px solid #ddd;
 .preview{font-size:.85em;font-style:italic;background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:.4rem .6rem;margin:.4rem 0}
 .url{font-family:ui-monospace,Menlo,monospace;font-size:.78em;color:#777;word-break:break-all}
 .warn{background:#fff7e6;border-left:4px solid #d39e00;padding:.6rem .8rem;border-radius:4px;font-size:.88em;margin-top:.6rem}
+.tabs{position:relative}
+.hint{position:absolute;background:#1c1a16;color:#faf6ea;padding:.55rem .85rem;border-radius:6px;font-size:.82rem;font-weight:500;box-shadow:0 6px 16px rgba(0,0,0,0.2);opacity:0;transform:translateY(-6px) scale(.95);transition:opacity .35s ease, transform .35s ease;pointer-events:none;max-width:280px;line-height:1.35;z-index:5;white-space:normal}
+.hint::after{content:"";position:absolute;top:-6px;left:24px;width:12px;height:12px;background:#1c1a16;transform:rotate(45deg)}
+.hint.visible{opacity:1;transform:translateY(0) scale(1)}
 .printable{display:none}
 @media print {
  body{margin:0;padding:0;max-width:none}
@@ -799,7 +819,8 @@ img.qr{width:240px;height:240px;image-rendering:pixelated;border:1px solid #ddd;
 <nav class="tabs">
  <a href="/admin">Conversaciones</a>
  <a href="/admin/connection" class="active">Conexión</a>
- <a href="/admin/business">Información</a>
+ <a href="/admin/business" id="biz-tab">Información</a>
+ {{ if eq .HintTarget "biz" }}<div id="hint-biz" class="hint" role="status">{{ .HintMessage }}</div>{{ end }}
 </nav>
 {{ if .Flash }}<div class="flash">{{ .Flash }}</div>{{ end }}
 <h1>Conexión de WhatsApp</h1>
@@ -869,6 +890,22 @@ img.qr{width:240px;height:240px;image-rendering:pixelated;border:1px solid #ddd;
  </div>
 </div>
 {{ end }}
+<script>
+(function(){
+  var hint = document.getElementById('hint-biz');
+  var target = document.getElementById('biz-tab');
+  if (!hint || !target) return;
+  function place(){
+    var t = target.getBoundingClientRect();
+    var n = target.parentElement.getBoundingClientRect();
+    hint.style.left = (t.left - n.left) + 'px';
+    hint.style.top = (t.bottom - n.top + 8) + 'px';
+  }
+  place();
+  setTimeout(function(){ hint.classList.add('visible'); }, 400);
+  window.addEventListener('resize', place);
+})();
+</script>
 </body></html>`))
 
 var dashHistoryTmpl = template.Must(template.New("dashHistory").Parse(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>{{ .CustomerJID }} — Chalagente</title>
