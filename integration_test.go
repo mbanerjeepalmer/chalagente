@@ -253,7 +253,7 @@ func TestUnpairWhatsAppClearsDeviceJID(t *testing.T) {
 		t.Fatalf("UpdateBusiness: %v", err)
 	}
 
-	res, err := client.PostForm(srv.URL+"/app/whatsapp/unpair", url.Values{})
+	res, err := client.PostForm(srv.URL+"/admin/whatsapp/unpair", url.Values{})
 	if err != nil {
 		t.Fatalf("POST unpair: %v", err)
 	}
@@ -404,7 +404,7 @@ func TestShareRedirectPicksTranslationFromAcceptLanguage(t *testing.T) {
 		"extra":               []string{""},
 		"wa_prefill_template": []string{"Hi, help me at {business}"},
 	}
-	res, err := client.PostForm(srv.URL+"/app/business", form)
+	res, err := client.PostForm(srv.URL+"/admin/business", form)
 	if err != nil {
 		t.Fatalf("POST business: %v", err)
 	}
@@ -455,6 +455,37 @@ func TestShareRedirectPicksTranslationFromAcceptLanguage(t *testing.T) {
 	}
 }
 
+func TestLegacyAppPathsRedirectToAdmin(t *testing.T) {
+	a := newTestApp(t)
+	srv := httptest.NewServer(a.Mux())
+	defer srv.Close()
+
+	client := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	cases := []struct {
+		from, to string
+	}{
+		{"/app", "/admin"},
+		{"/app/business", "/admin/business"},
+		{"/app/conversations/abc", "/admin/conversations/abc"},
+		{"/app/qr.png?foo=1", "/admin/qr.png?foo=1"},
+	}
+	for _, tc := range cases {
+		res, err := client.Get(srv.URL + tc.from)
+		if err != nil {
+			t.Fatalf("GET %s: %v", tc.from, err)
+		}
+		res.Body.Close()
+		if res.StatusCode != http.StatusPermanentRedirect {
+			t.Errorf("%s: status got %d want 308", tc.from, res.StatusCode)
+		}
+		if got := res.Header.Get("Location"); got != tc.to {
+			t.Errorf("%s: Location got %q want %q", tc.from, got, tc.to)
+		}
+	}
+}
+
 func TestConversationHistoryViewer(t *testing.T) {
 	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
@@ -485,7 +516,7 @@ func TestConversationHistoryViewer(t *testing.T) {
 	}
 
 	client := &http.Client{Jar: jar}
-	res, err := client.Get(srv.URL + "/app/conversations/" + convo.ID)
+	res, err := client.Get(srv.URL + "/admin/conversations/" + convo.ID)
 	if err != nil {
 		t.Fatalf("GET history: %v", err)
 	}
@@ -504,7 +535,7 @@ func TestConversationHistoryViewer(t *testing.T) {
 	jar2, _ := cookiejar.New(nil)
 	signInAs(t, a, jar2, srv, "clerk-other")
 	other := &http.Client{Jar: jar2}
-	res2, err := other.Get(srv.URL + "/app/conversations/" + convo.ID)
+	res2, err := other.Get(srv.URL + "/admin/conversations/" + convo.ID)
 	if err != nil {
 		t.Fatalf("GET as other: %v", err)
 	}
@@ -550,7 +581,7 @@ func TestTriggerKeywordExplained(t *testing.T) {
 		t.Fatalf("UpdateBusiness: %v", err)
 	}
 
-	for _, path := range []string{"/app", "/onboarding/test"} {
+	for _, path := range []string{"/admin", "/onboarding/test"} {
 		res, err := client.Get(srv.URL + path)
 		if err != nil {
 			t.Fatalf("GET %s: %v", path, err)

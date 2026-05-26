@@ -310,7 +310,7 @@ func (a *App) handleDashboardAgentToggle(w http.ResponseWriter, r *http.Request)
 	if !b.AgentEnabled {
 		state = "apagado"
 	}
-	http.Redirect(w, r, "/app?flash=Agente+"+state, http.StatusSeeOther)
+	http.Redirect(w, r, "/admin?flash=Agente+"+state, http.StatusSeeOther)
 }
 
 // historyMaxMessages caps the read-only conversation viewer. Real chats run
@@ -419,7 +419,7 @@ func (a *App) handleDashboardTriggerToggle(w http.ResponseWriter, r *http.Reques
 	if !b.TriggerRequired {
 		state = "opcional"
 	}
-	http.Redirect(w, r, "/app?flash=Palabra+clave+"+state, http.StatusSeeOther)
+	http.Redirect(w, r, "/admin?flash=Palabra+clave+"+state, http.StatusSeeOther)
 }
 
 func (a *App) handleDashboardBusiness(w http.ResponseWriter, r *http.Request) {
@@ -456,7 +456,7 @@ func (a *App) handleDashboardBusiness(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		http.Redirect(w, r, "/app/business?flash=Guardado", http.StatusSeeOther)
+		http.Redirect(w, r, "/admin/business?flash=Guardado", http.StatusSeeOther)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -493,7 +493,7 @@ func (a *App) handleDashboardUnpair(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "save: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, "/app?flash=WhatsApp+desvinculado+y+historial+borrado", http.StatusSeeOther)
+	http.Redirect(w, r, "/admin?flash=WhatsApp+desvinculado+y+historial+borrado", http.StatusSeeOther)
 }
 
 func (a *App) handleDashboardEvents(w http.ResponseWriter, r *http.Request) {
@@ -590,8 +590,8 @@ form{display:inline}
 </style></head><body>
 <h1>{{ .Business.Name }}</h1>
 <nav class="tabs">
- <a href="/app" class="active">Conversaciones</a>
- <a href="/app/business">Información</a>
+ <a href="/admin" class="active">Conversaciones</a>
+ <a href="/admin/business">Información</a>
 </nav>
 {{ if .Flash }}<div class="flash">{{ .Flash }}</div>{{ end }}
 <div class="grid">
@@ -599,7 +599,7 @@ form{display:inline}
   <div class="card">
    <strong>Agente:</strong>
    {{ if .Business.AgentEnabled }}<span class="status ok">encendido</span>{{ else }}<span class="status bad">apagado</span>{{ end }}
-   <form method="POST" action="/app/agent" style="float:right">
+   <form method="POST" action="/admin/agent" style="float:right">
     {{ if .Business.AgentEnabled }}
      <input type="hidden" name="enabled" value="0"><button>Apagar</button>
     {{ else }}
@@ -613,7 +613,7 @@ form{display:inline}
      Responde a <strong>todos</strong> los mensajes entrantes — no se necesita palabra clave.
     {{ end }}
    </p>
-   <form method="POST" action="/app/trigger" style="margin-top:.4rem">
+   <form method="POST" action="/admin/trigger" style="margin-top:.4rem">
     {{ if .Business.TriggerRequired }}
      <input type="hidden" name="required" value="0"><button type="submit">Quitar palabra clave</button>
     {{ else }}
@@ -626,7 +626,7 @@ form{display:inline}
    {{ if .Connected }}<span class="status ok">conectado</span>{{ else }}<span class="status bad">desconectado</span>{{ end }}
    <div style="font-family:monospace;font-size:.85em;color:#555">{{ .Business.WADeviceJID }}</div>
    {{ if .Business.WADeviceJID }}
-   <form method="POST" action="/app/whatsapp/unpair" style="margin-top:.5rem"
+   <form method="POST" action="/admin/whatsapp/unpair" style="margin-top:.5rem"
          onsubmit="return confirm('¿Desvincular WhatsApp?\n\nEsto BORRARÁ todo tu historial de chats de chalagente.com. Tu WhatsApp no se toca — los mensajes siguen en tu teléfono.\n\nTendrás que escanear el QR otra vez para volver a conectar.');">
     <button>Desvincular WhatsApp y borrar historial</button>
    </form>
@@ -638,7 +638,7 @@ form{display:inline}
     <ul class="convos">
     {{ range .Conversations }}
      <li>
-      <a href="/app/conversations/{{ .ID }}" style="display:block;color:inherit;text-decoration:none">
+      <a href="/admin/conversations/{{ .ID }}" style="display:block;color:inherit;text-decoration:none">
        <span class="when">{{ .UpdatedAt.Format "15:04" }}</span>
        <div class="who">{{ .CustomerJID }}</div>
        <div class="body">{{ if eq .LastDir "out" }}→{{ else }}←{{ end }} {{ .LastBody }}</div>
@@ -658,7 +658,7 @@ form{display:inline}
  <div>
   <div class="card" style="text-align:center">
    <h2 style="margin-top:0">Comparte tu número</h2>
-   <img class="qr" src="/app/qr.png">
+   <img class="qr" src="/admin/qr.png">
    <p style="font-size:.8em;color:#666;margin:.4rem 0 .2rem">Cuando escanean tu QR, el cliente entra a WhatsApp con este mensaje listo para enviar:</p>
    <p style="font-size:.85em;font-style:italic;background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:.4rem .6rem;margin:.2rem 0">{{ .PrefillResolved }}</p>
    <p style="font-size:.78em;color:#888;margin:.4rem 0 0">QR apunta a <a href="{{ .ShareURL }}">{{ .ShareURL }}</a></p>
@@ -675,7 +675,7 @@ form{display:inline}
 </div>
 <script>
 const feed = document.getElementById('feed');
-const es = new EventSource('/app/events');
+const es = new EventSource('/admin/events');
 es.onmessage = (e) => {
  try {
   const d = JSON.parse(e.data);
@@ -725,7 +725,7 @@ h1{margin:.2rem 0 .8rem;font-size:1.4rem;color:#075e54}
 .empty{padding:2rem;text-align:center;color:#666}
 .note{color:#555;font-size:.85em;margin-top:.8rem;text-align:center}
 </style></head><body>
-<div class="crumbs"><a href="/app">← Conversaciones</a></div>
+<div class="crumbs"><a href="/admin">← Conversaciones</a></div>
 <h1>{{ .CustomerJID }}</h1>
 <p class="meta">{{ .Total }} mensaje{{ if ne .Total 1 }}s{{ end }} · solo lectura</p>
 <div class="chat">
@@ -753,12 +753,12 @@ button{padding:.6rem 1rem;font-size:1rem;border-radius:4px;border:1px solid #bbb
 .flash{background:#dfe;border:1px solid #9c9;padding:.5rem;border-radius:4px;margin:1rem 0}
 </style></head><body>
 <nav class="tabs">
- <a href="/app">Conversaciones</a>
- <a href="/app/business" class="active">Información</a>
+ <a href="/admin">Conversaciones</a>
+ <a href="/admin/business" class="active">Información</a>
 </nav>
 <h1>Información del negocio</h1>
 {{ if .Flash }}<div class="flash">{{ .Flash }}</div>{{ end }}
-<form method="POST" action="/app/business">
+<form method="POST" action="/admin/business">
  <label>Nombre<input name="name" value="{{ .Business.Name }}"></label>
  <label>Dirección<input name="address" value="{{ .Business.Address }}"></label>
  <label>Teléfono<input name="phone" value="{{ .Business.Phone }}"></label>

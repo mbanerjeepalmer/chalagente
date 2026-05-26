@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/mbanerjeepalmer/chalagente/internal/layout"
@@ -48,20 +49,24 @@ func (a *App) Mux() http.Handler {
 	protected.HandleFunc("/onboarding/test", a.handleOnboardingTest)
 	protected.HandleFunc("/onboarding/finish", a.handleOnboardingFinish)
 
-	protected.HandleFunc("/app", a.handleDashboard)
+	// Canonical admin routes — /admin/* is the source of truth.
 	protected.HandleFunc("/admin", a.handleDashboard)
-	protected.HandleFunc("GET /app/conversations/{id}", a.handleDashboardConversation)
-	protected.HandleFunc("/app/agent", a.handleDashboardAgentToggle)
-	protected.HandleFunc("POST /app/trigger", a.handleDashboardTriggerToggle)
-	protected.HandleFunc("/app/business", a.handleDashboardBusiness)
-	protected.HandleFunc("/app/events", a.handleDashboardEvents)
-	protected.HandleFunc("/app/qr.png", a.handleDashboardShareQR)
-	protected.HandleFunc("POST /app/whatsapp/unpair", a.handleDashboardUnpair)
+	protected.HandleFunc("GET /admin/conversations/{id}", a.handleDashboardConversation)
+	protected.HandleFunc("/admin/agent", a.handleDashboardAgentToggle)
+	protected.HandleFunc("POST /admin/trigger", a.handleDashboardTriggerToggle)
+	protected.HandleFunc("/admin/business", a.handleDashboardBusiness)
+	protected.HandleFunc("/admin/events", a.handleDashboardEvents)
+	protected.HandleFunc("/admin/qr.png", a.handleDashboardShareQR)
+	protected.HandleFunc("POST /admin/whatsapp/unpair", a.handleDashboardUnpair)
+
+	// Legacy /app/* paths 308 → /admin/*. 308 preserves method+body so
+	// any old bookmarks, form posts, or QR codes targeting the previous
+	// namespace keep working without losing data.
+	mux.HandleFunc("/app", redirectToAdmin)
+	mux.HandleFunc("/app/", redirectToAdmin)
 
 	mux.Handle("/onboarding", a.authMiddleware(protected))
 	mux.Handle("/onboarding/", a.authMiddleware(protected))
-	mux.Handle("/app", a.authMiddleware(protected))
-	mux.Handle("/app/", a.authMiddleware(protected))
 	mux.Handle("/admin", a.authMiddleware(protected))
 	mux.Handle("/admin/", a.authMiddleware(protected))
 
@@ -72,6 +77,17 @@ func (a *App) serveHTTP(addr string) {
 	if err := http.ListenAndServe(addr, a.Mux()); err != nil {
 		log.Printf("http server: %v", err)
 	}
+}
+
+// redirectToAdmin permanently forwards /app/<rest> to /admin/<rest>, query
+// string included. Uses 308 (permanent redirect, preserves method + body)
+// so POSTs to legacy /app/* keep their form data on the way through.
+func redirectToAdmin(w http.ResponseWriter, r *http.Request) {
+	target := "/admin" + strings.TrimPrefix(r.URL.Path, "/app")
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery
+	}
+	http.Redirect(w, r, target, http.StatusPermanentRedirect)
 }
 
 func (a *App) handleLanding(w http.ResponseWriter, r *http.Request) {
