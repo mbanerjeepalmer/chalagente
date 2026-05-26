@@ -133,6 +133,40 @@ const FooterMarketingHTML = `<footer>
   </div>
 </footer>`
 
+// ChatPaneStyles is the WhatsApp-clone visual treatment shared by /demo
+// and /admin/conversations/{id}. The classes (chatpane, phead, chat,
+// bubble.in / bubble.out) are kept identical so the two screens render
+// the same conversation visually — the demo just adds a composer below
+// and the admin viewer doesn't.
+const ChatPaneStyles = `
+.chatpane{display:flex;flex-direction:column;background:#0e1620;border-radius:6px;overflow:hidden;border:1px solid var(--line);box-shadow:0 8px 24px rgba(40,30,15,0.10);min-height:520px}
+.chatpane .phead{display:flex;align-items:center;gap:.6rem;padding:.8rem 1.2rem;background:#075e54;color:white;border-bottom:1px solid #04443c}
+.chatpane .phead .avatar{width:36px;height:36px;border-radius:50%;background:#25d366;display:grid;place-items:center;font-weight:700;color:#04130b}
+.chatpane .phead .name{font-weight:600}
+.chatpane .phead .sub{font-size:.75em;opacity:.85}
+.chatpane .chat{flex:1;overflow-y:auto;padding:1rem 1.2rem;background:#ece5dd;display:flex;flex-direction:column;gap:.4rem;min-height:380px}
+.chatpane .bubble{max-width:75%;padding:.55rem .75rem;border-radius:12px;font-size:.95rem;color:#222;box-shadow:0 1px 1px rgba(0,0,0,.08);word-wrap:break-word;font-family:"Inter","Helvetica Neue",sans-serif}
+/*
+ * Bubble alignment defaults to the customer's perspective: the customer's
+ * own message (Direction="in" — *inbound* from the agent's point of view)
+ * sits on the right in green, and the agent's reply (Direction="out")
+ * sits on the left in white. This matches WhatsApp's "you typed on the
+ * right" mental model when the customer is the one looking at the chat.
+ *
+ * .chatpane.from-business swaps the alignment for the dashboard's
+ * history viewer, where the operator is the business owner: the
+ * business's own outgoing messages sit on the right, the customer's
+ * inbound messages on the left.
+ */
+.chatpane .bubble.in{background:#dcf8c6;align-self:flex-end;border-bottom-right-radius:2px}
+.chatpane .bubble.out{background:white;align-self:flex-start;border-bottom-left-radius:2px}
+.chatpane.from-business .bubble.in{background:white;align-self:flex-start;border-bottom-right-radius:12px;border-bottom-left-radius:2px}
+.chatpane.from-business .bubble.out{background:#dcf8c6;align-self:flex-end;border-bottom-left-radius:12px;border-bottom-right-radius:2px}
+.chatpane .bubble small,.chatpane .bubble .when{display:block;color:#888;font-size:.7em;margin-top:.2rem}
+.chatpane .bubble .kindbadge{display:inline-block;font-size:.7em;color:#555;background:rgba(0,0,0,.05);border-radius:3px;padding:1px 5px;margin-right:.3rem;text-transform:uppercase;letter-spacing:.05em}
+.chatpane audio{width:100%;margin-top:.25rem;height:32px}
+`
+
 // FooterLegalHTML is the slimmer footer used on legal pages — no demo /
 // sign-in links because those pages already feel like end-of-the-funnel.
 const FooterLegalHTML = `<footer><div class="container">
