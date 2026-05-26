@@ -271,6 +271,102 @@ func TestUnpairWhatsAppClearsDeviceJID(t *testing.T) {
 	}
 }
 
+func TestShareRedirectAndPrefill(t *testing.T) {
+	a := newTestApp(t)
+	srv := httptest.NewServer(a.Mux())
+	defer srv.Close()
+	a.BaseURL = srv.URL
+
+	jar, _ := cookiejar.New(nil)
+	signInAs(t, a, jar, srv, "clerk-share")
+
+	u, err := a.Store.GetUserByEmail(context.Background(), "clerk-share@example.com")
+	if err != nil {
+		t.Fatalf("GetUserByEmail: %v", err)
+	}
+	biz, err := a.Store.CreateBusiness(context.Background(), u.ID)
+	if err != nil {
+		t.Fatalf("CreateBusiness: %v", err)
+	}
+	biz.Name = "Birrias El Chalán"
+	biz.WADeviceJID = "5215512345678:1@s.whatsapp.net"
+	if err := a.Store.UpdateBusiness(context.Background(), biz); err != nil {
+		t.Fatalf("UpdateBusiness: %v", err)
+	}
+
+	client := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	res, err := client.Get(srv.URL + "/go/" + biz.ID)
+	if err != nil {
+		t.Fatalf("GET /go/{id}: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusFound {
+		t.Fatalf("redirect status: got %d want 302", res.StatusCode)
+	}
+	loc := res.Header.Get("Location")
+	if !strings.HasPrefix(loc, "https://wa.me/5215512345678?text=") {
+		t.Fatalf("redirect target: %q", loc)
+	}
+	// Default prefill should include the business name AND the trigger keyword
+	// (TriggerRequired defaults to true).
+	decoded, _ := url.QueryUnescape(loc[strings.Index(loc, "?text=")+len("?text="):])
+	if !strings.Contains(strings.ToLower(decoded), "chalagente") {
+		t.Errorf("default prefill missing keyword: %q", decoded)
+	}
+	if !strings.Contains(decoded, "Birrias El Chalán") {
+		t.Errorf("default prefill missing business name: %q", decoded)
+	}
+
+	// Custom prefill with placeholder.
+	biz.WAPrefillTemplate = "Hola {business}, ¿me ayudas con un pedido?"
+	if err := a.Store.UpdateBusiness(context.Background(), biz); err != nil {
+		t.Fatalf("UpdateBusiness 2: %v", err)
+	}
+	res2, err := client.Get(srv.URL + "/go/" + biz.ID)
+	if err != nil {
+		t.Fatalf("GET /go/{id} 2: %v", err)
+	}
+	res2.Body.Close()
+	loc2 := res2.Header.Get("Location")
+	decoded2, _ := url.QueryUnescape(loc2[strings.Index(loc2, "?text=")+len("?text="):])
+	if !strings.Contains(decoded2, "Hola Birrias El Chalán") {
+		t.Errorf("custom prefill not expanded: %q", decoded2)
+	}
+	// Keyword should still be injected because TriggerRequired is still true
+	// and the custom copy lacks 'Chalagente'.
+	if !strings.Contains(strings.ToLower(decoded2), "chalagente") {
+		t.Errorf("keyword injection missing for gated tenant: %q", decoded2)
+	}
+
+	// Turn off gating; keyword injection should stop.
+	biz.TriggerRequired = false
+	if err := a.Store.UpdateBusiness(context.Background(), biz); err != nil {
+		t.Fatalf("UpdateBusiness 3: %v", err)
+	}
+	res3, err := client.Get(srv.URL + "/go/" + biz.ID)
+	if err != nil {
+		t.Fatalf("GET /go/{id} 3: %v", err)
+	}
+	res3.Body.Close()
+	loc3 := res3.Header.Get("Location")
+	decoded3, _ := url.QueryUnescape(loc3[strings.Index(loc3, "?text=")+len("?text="):])
+	if strings.Contains(strings.ToLower(decoded3), "chalagente") {
+		t.Errorf("keyword injected when gating off: %q", decoded3)
+	}
+
+	// Unknown id should 404.
+	resNF, err := client.Get(srv.URL + "/go/no-such-business")
+	if err != nil {
+		t.Fatalf("GET unknown: %v", err)
+	}
+	resNF.Body.Close()
+	if resNF.StatusCode != http.StatusNotFound {
+		t.Fatalf("unknown id: got %d want 404", resNF.StatusCode)
+	}
+}
+
 func TestConversationHistoryViewer(t *testing.T) {
 	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
