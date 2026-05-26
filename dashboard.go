@@ -956,6 +956,7 @@ var dashHistoryTmpl = template.Must(template.New("dashHistory").Parse(`<!doctype
 .agent-state{display:flex;justify-content:space-between;align-items:center;background:var(--bone);border:1px solid var(--line);border-radius:6px;padding:.55rem .85rem;margin:0 0 .8rem;font-size:.88em;gap:.6rem;flex-wrap:wrap}
 .agent-state button{padding:.4rem .8rem;border:1px solid var(--ink);background:transparent;color:var(--ink);border-radius:4px;cursor:pointer;font-family:inherit;font-size:.85rem}
 .agent-state button:hover{background:rgba(28,26,22,0.05)}
+.agent-state .ctrls{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}
 </style></head><body>
 <div class="wrap">
  <div class="crumbs"><a href="/admin">← Conversaciones</a></div>
@@ -967,13 +968,16 @@ var dashHistoryTmpl = template.Must(template.New("dashHistory").Parse(`<!doctype
   <span>Agente en este chat:
    {{ if .AgentEnabled }}<strong style="color:#054f31">activo</strong>{{ else }}<strong style="color:#6e1d1a">en pausa</strong>{{ end }}
   </span>
-  <form method="POST" action="/admin/conversations/{{ .ConversationID }}/agent">
-   {{ if .AgentEnabled }}
-    <input type="hidden" name="enabled" value="0"><button type="submit">Pausar agente aquí</button>
-   {{ else }}
-    <input type="hidden" name="enabled" value="1"><button type="submit">Reanudar agente aquí</button>
-   {{ end }}
-  </form>
+  <span class="ctrls">
+   <button type="button" id="flipBtn" data-mode="business" title="Cambiar perspectiva">Ver como cliente</button>
+   <form method="POST" action="/admin/conversations/{{ .ConversationID }}/agent" style="display:inline">
+    {{ if .AgentEnabled }}
+     <input type="hidden" name="enabled" value="0"><button type="submit">Pausar agente aquí</button>
+    {{ else }}
+     <input type="hidden" name="enabled" value="1"><button type="submit">Reanudar agente aquí</button>
+    {{ end }}
+   </form>
+  </span>
  </div>
  <div class="chatpane from-business">
   <div class="phead">
@@ -993,6 +997,23 @@ var dashHistoryTmpl = template.Must(template.New("dashHistory").Parse(`<!doctype
  </div>
  {{ if .Truncated }}<p class="note">Mostrando los últimos {{ .Total }} mensajes — el historial más antiguo está guardado pero no se muestra aquí.</p>{{ end }}
 </div>
+<script>
+(function(){
+  // Flip toggle: swaps the chatpane between the operator's view (default
+  // — business messages on the right) and the customer's view (customer
+  // messages on the right). Pure CSS class swap; layout.ChatPaneStyles
+  // already styles both states via .from-business.
+  var btn = document.getElementById('flipBtn');
+  var pane = document.querySelector('.chatpane');
+  if (!btn || !pane) return;
+  btn.addEventListener('click', function(){
+    var asCustomer = btn.dataset.mode === 'business';
+    pane.classList.toggle('from-business', !asCustomer);
+    btn.dataset.mode = asCustomer ? 'customer' : 'business';
+    btn.textContent = asCustomer ? 'Ver como negocio' : 'Ver como cliente';
+  });
+})();
+</script>
 </body></html>`))
 
 var dashBusinessTmpl = template.Must(template.New("dashBusiness").Parse(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Información — Chalagente</title>
