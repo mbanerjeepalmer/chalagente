@@ -16,19 +16,13 @@ func (a *App) Mux() http.Handler {
 	mux.HandleFunc("/privacidad", a.handlePrivacy)
 	mux.HandleFunc("/terminos", a.handleTerms)
 
-	if a.ClerkAuth != nil {
-		mux.HandleFunc("GET /sign-in", a.ClerkAuth.SignInPage)
-		mux.HandleFunc("GET /sign-up", a.ClerkAuth.SignUpPage)
-		mux.HandleFunc("POST /logout", a.ClerkAuth.Logout)
-		mux.HandleFunc("GET /signup", func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, "/sign-up", http.StatusSeeOther)
-		})
-	} else {
-		mux.HandleFunc("GET /signup", a.Auth.SignupForm)
-		mux.HandleFunc("POST /signup", a.Auth.SignupSubmit)
-		mux.HandleFunc("/auth/verify", a.Auth.Verify)
-		mux.HandleFunc("POST /logout", a.Auth.Logout)
-	}
+	mux.HandleFunc("GET /sign-in", a.ClerkAuth.SignInPage)
+	mux.HandleFunc("GET /sign-up", a.ClerkAuth.SignUpPage)
+	mux.HandleFunc("POST /logout", a.ClerkAuth.Logout)
+	// Legacy /signup → /sign-up so any old links keep working.
+	mux.HandleFunc("GET /signup", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/sign-up", http.StatusSeeOther)
+	})
 
 	mux.HandleFunc("/demo", a.handleTryPage)
 	mux.HandleFunc("/demo/business", a.handleTryBusiness)
@@ -328,7 +322,7 @@ section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
       <a href="#para-quien">Para quién</a>
       <a href="#como">Cómo funciona</a>
       <a href="/demo">Demo</a>
-      <a href="/signup">Iniciar sesión</a>
+      <a href="/sign-in">Iniciar sesión</a>
       <a href="/demo" class="btn btn-primary">Probar demo</a>
     </nav>
   </div>
@@ -341,7 +335,7 @@ section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
       <p class="hero-sub">Chalagente atiende a tus clientes <strong>en su idioma</strong>, por WhatsApp. Tú haces lo tuyo; él contesta.</p>
       <div class="hero-cta">
         <a href="/demo" class="btn btn-primary">Probar demo →</a>
-        <a href="/signup" class="btn btn-ghost">Iniciar sesión</a>
+        <a href="/sign-in" class="btn btn-ghost">Iniciar sesión</a>
       </div>
     </div>
     <aside class="wa-mock" aria-label="Vista previa de conversación">
@@ -446,7 +440,7 @@ section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
       <a href="/privacidad">Aviso de privacidad</a>
       <a href="/terminos">Términos</a>
       <a href="/demo">Demo</a>
-      <a href="/signup">Iniciar sesión</a>
+      <a href="/sign-in">Iniciar sesión</a>
       <a href="` + githubURL + `" rel="noopener" aria-label="GitHub" title="GitHub">
         <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-3px"><path fill="currentColor" d="M12 .5C5.73.5.75 5.48.75 11.75c0 4.95 3.21 9.14 7.66 10.62.56.1.77-.24.77-.54v-1.9c-3.11.68-3.77-1.5-3.77-1.5-.51-1.3-1.25-1.64-1.25-1.64-1.02-.7.08-.68.08-.68 1.13.08 1.72 1.16 1.72 1.16 1 1.72 2.63 1.22 3.27.94.1-.73.39-1.22.7-1.5-2.48-.28-5.09-1.24-5.09-5.52 0-1.22.44-2.22 1.15-3-.12-.28-.5-1.42.11-2.96 0 0 .94-.3 3.08 1.15a10.7 10.7 0 0 1 5.6 0c2.14-1.45 3.08-1.15 3.08-1.15.62 1.54.23 2.68.11 2.96.72.78 1.15 1.78 1.15 3 0 4.29-2.61 5.23-5.1 5.51.4.34.76 1.02.76 2.06v3.05c0 .3.2.65.78.54 4.45-1.48 7.66-5.67 7.66-10.62C23.25 5.48 18.27.5 12 .5z"/></svg>
       </a>
@@ -505,7 +499,7 @@ var legalTmpl = template.Must(template.New("legal").Parse(`<!doctype html>
 </style></head><body>
 <header class="nav"><div class="container nav-inner">
   <a class="logo" href="/"><span class="logo-mark">C</span><span>Chalagente</span></a>
-  <nav class="nav-links"><a href="/demo">Demo</a><a href="/signup">Iniciar sesión</a></nav>
+  <nav class="nav-links"><a href="/demo">Demo</a><a href="/sign-in">Iniciar sesión</a></nav>
 </div></header>
 <main class="legal">
   <h1>{{ .Title }}</h1>
