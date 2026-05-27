@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/mbanerjeepalmer/chalagente/internal/agent"
+	"github.com/mbanerjeepalmer/chalagente/internal/layout"
 )
 
 const tryCookieName = "chala_try"
@@ -144,9 +145,17 @@ func (a *App) handleTryPage(w http.ResponseWriter, r *http.Request) {
 	biz := ses.Business
 	ses.mu.Unlock()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tryTmpl.Execute(w, struct{ Business tryBusiness }{biz}); err != nil {
+	if err := tryTmpl.Execute(w, tryView{Business: biz}); err != nil {
 		log.Printf("tryTmpl: %v", err)
 	}
+}
+
+// tryView is the data shape rendered into tryTmpl. IsAdmin swaps the
+// marketing chrome for the admin nav and adds the customer/business
+// flip toggle — see /admin/conversations/demo.
+type tryView struct {
+	Business tryBusiness
+	IsAdmin  bool
 }
 
 func (a *App) handleTryBusiness(w http.ResponseWriter, r *http.Request) {
@@ -187,6 +196,7 @@ func (a *App) handleTrySend(w http.ResponseWriter, r *http.Request) {
 	var (
 		incomingText string
 		transcript   string
+		audioLang    string
 		hadAudio     bool
 	)
 
@@ -210,6 +220,7 @@ func (a *App) handleTrySend(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			transcript = tr.Text
+			audioLang = tr.Language
 			if incomingText == "" {
 				incomingText = transcript
 			}
@@ -278,8 +289,10 @@ func (a *App) handleTrySend(w http.ResponseWriter, r *http.Request) {
 		"has_audio":  false,
 	}
 	if hadAudio {
-		syn, err := a.Voice.Synthesize(ctx, reply.Text, "default")
-		if err == nil {
+		syn, err := a.Voice.Synthesize(ctx, reply.Text, voiceIDForLang(audioLang))
+		if err != nil {
+			out["audio_error"] = err.Error()
+		} else {
 			out["has_audio"] = true
 			out["audio_b64"] = base64.StdEncoding.EncodeToString(syn.Audio)
 			out["audio_mime"] = syn.MimeType
@@ -288,6 +301,44 @@ func (a *App) handleTrySend(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(out)
+}
+
+// presetVoicePrompt is the demo's signature first-message phrase — the
+// French question a visitor "asks" by hitting the prefilled voice-note
+// button. Stays in French so the agent's reply uses the multilingual
+// behaviour the demo is supposed to show off.
+const presetVoicePrompt = "Bonjour, qu'est-ce que la birria ?"
+
+// presetVoiceLang controls which ElevenLabs voice handles the synth — the
+// pipeline's voiceIDForLang helper maps this back to ELEVENLABS_VOICE_FR
+// in prod, the multilingual default otherwise.
+const presetVoiceLang = "fr"
+
+// handleTryPresetAudio returns the audio bytes for the prefilled voice
+// note. The voice provider's cache (NewCachedProvider wraps the real
+// ElevenLabs client in main.go) means subsequent requests hit memory, not
+// the network. When no API key is configured the MockProvider returns an
+// empty audio buffer and we serve a 404 so the JS falls back to the text
+// flow gracefully.
+func (a *App) handleTryPresetAudio(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	syn, err := a.Voice.Synthesize(ctx, presetVoicePrompt, voiceIDForLang(presetVoiceLang))
+	if err != nil {
+		http.Error(w, "synth: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	if len(syn.Audio) == 0 {
+		http.Error(w, "no audio", http.StatusNotFound)
+		return
+	}
+	mime := syn.MimeType
+	if mime == "" {
+		mime = "audio/ogg"
+	}
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Cache-Control", "public, max-age=600")
+	_, _ = w.Write(syn.Audio)
 }
 
 func (a *App) handleTryHistory(w http.ResponseWriter, r *http.Request) {
@@ -316,19 +367,14 @@ func (a *App) handleTryReset(w http.ResponseWriter, r *http.Request) {
 var tryTmpl = template.Must(template.New("try").Parse(`<!doctype html><html lang="es-MX"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Demo · Chalagente — chatea con un agente sin registrarte</title>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-:root {
-  --wall:#f1ead9; --wall-shade:#e6dec7; --plaster:#ece2cb; --bone:#faf6ea;
-  --ink:#1c1a16; --ink-soft:#3a352c; --muted:#6b6354; --line:rgba(28,26,22,0.14);
-  --terracotta:#b5482e; --terracotta-deep:#8a3320; --ochre:#c8932b; --indigo:#25406e; --leaf:#4f6a3a;
-}
-*{box-sizing:border-box}
-html,body{margin:0;padding:0;background:var(--wall);color:var(--ink-soft);font-family:"Inter","Helvetica Neue",sans-serif;line-height:1.55;
-  background-image: radial-gradient(rgba(110,90,60,0.05) 1px, transparent 1px), linear-gradient(180deg,var(--wall),var(--wall-shade));
-  background-size: 3px 3px, 100% 100%;}
-h1,h2,h3{font-family:"Cormorant Garamond",Georgia,serif;color:var(--ink);font-weight:600;letter-spacing:-0.005em}
-a{color:var(--terracotta-deep)}
+` + layout.FaviconLink + `
+` + layout.FontsLink + `
+<style>` + layout.SharedStyles + layout.ChatPaneStyles + `
+/* Demo-specific overrides — tighter line-height than the marketing
+ * pages and a single-radial dotted background (the landing layers two).
+ * Kept inline so the demo's local feel is obviously the local layer. */
+body{line-height:1.55}
+body{background-size: 3px 3px, 100% 100%}
 .topbar{display:flex;justify-content:space-between;align-items:center;padding:.9rem 1.6rem;border-bottom:1px solid var(--line);background:rgba(241,234,217,0.95);backdrop-filter:blur(6px);position:sticky;top:0;z-index:50}
 .topbar .logo{display:flex;align-items:center;gap:.55rem;font-family:"Cormorant Garamond",serif;font-weight:700;font-size:1.3rem;color:var(--ink);text-decoration:none}
 .topbar .logo-mark{width:28px;height:28px;border-radius:50%;background:var(--terracotta);display:grid;place-items:center;color:var(--bone);font-family:"Cormorant Garamond",serif;font-weight:700;font-size:.95rem;box-shadow:inset 0 -2px 0 rgba(0,0,0,0.15)}
@@ -359,17 +405,14 @@ a{color:var(--terracotta-deep)}
 .tooltip::after{content:"";position:absolute;bottom:-6px;right:36px;width:12px;height:12px;background:var(--ink);transform:rotate(45deg)}
 
 /* The WhatsApp chat panel: keep clone styling. */
-.chatpane{display:flex;flex-direction:column;background:#0e1620;border-radius:6px;overflow:hidden;border:1px solid var(--line);box-shadow:0 8px 24px rgba(40,30,15,0.10);min-height:560px}
-.phead{display:flex;align-items:center;gap:.6rem;padding:.8rem 1.2rem;background:#075e54;color:white;border-bottom:1px solid #04443c}
-.phead .avatar{width:36px;height:36px;border-radius:50%;background:#25d366;display:grid;place-items:center;font-weight:700;color:#04130b}
-.phead .name{font-weight:600}.phead .sub{font-size:.75em;opacity:.85}
-.chat{flex:1;overflow-y:auto;padding:1rem 1.2rem;background:#ece5dd;display:flex;flex-direction:column;gap:.4rem;min-height:380px}
-.bubble{max-width:75%;padding:.55rem .75rem;border-radius:12px;font-size:.95rem;color:#222;box-shadow:0 1px 1px rgba(0,0,0,.08);word-wrap:break-word;font-family:"Inter",sans-serif}
-.bubble.in{background:#dcf8c6;align-self:flex-end;border-bottom-right-radius:2px}
-.bubble.out{background:white;align-self:flex-start;border-bottom-left-radius:2px}
-.bubble small{display:block;color:#888;font-size:.7em;margin-top:.2rem}
-audio{width:100%;margin-top:.25rem;height:32px}
+/* chatpane, phead, chat, bubble and audio rules come from
+ * layout.ChatPaneStyles at the top of this style block. */
+.chatpane{min-height:560px}
 .composer{display:flex;gap:.5rem;padding:.6rem .8rem;background:#f0f0f0;border-top:1px solid #ccc}
+.preset-row{padding:.4rem .8rem .55rem;background:#f0f0f0;border-top:1px solid #e0e0e0;text-align:center}
+.preset-btn{background:transparent;border:1px solid var(--terracotta);color:var(--terracotta-deep);border-radius:18px;padding:.35rem .9rem;font-size:.82rem;font-family:inherit;cursor:pointer}
+.preset-btn:hover{background:rgba(181,72,46,0.08)}
+.preset-btn:disabled{opacity:.6;cursor:wait}
 .composer input[type=text]{flex:1;padding:.55rem .9rem;border:none;border-radius:18px;font-size:.95rem;font-family:"Inter",sans-serif}
 .composer button{border:none;border-radius:50%;width:42px;height:42px;background:#25d366;color:white;font-size:1.2rem;cursor:pointer}
 .composer .audiobtn{background:#075e54}
@@ -382,13 +425,25 @@ audio{width:100%;margin-top:.25rem;height:32px}
 </head><body>
 <div class="topbar">
  <a class="logo" href="/"><span class="logo-mark">C</span><span>Chalagente</span></a>
+ {{ if .IsAdmin }}
+ <nav style="display:flex;gap:1.1rem;align-items:center;font-size:.92rem">
+  <a href="/admin">Conversaciones</a>
+  <a href="/admin/connection">Conexión</a>
+  <a href="/admin/business">Información</a>
+ </nav>
+ {{ else }}
  <div style="display:flex;gap:.6rem;align-items:center">
-  <a href="/signup" style="font-size:.92rem">Iniciar sesión</a>
-  <a class="btn" href="/signup">Crear cuenta →</a>
+  <a href="/sign-in" style="font-size:.92rem">Iniciar sesión</a>
+  <a class="btn" href="/sign-up">Crear cuenta →</a>
  </div>
+ {{ end }}
 </div>
 <div class="banner">
- <strong>Modo demo</strong> · Edita los datos del negocio a la izquierda y mira cómo el agente los usa. Nada se guarda al cerrar la pestaña.
+ {{ if .IsAdmin }}
+  <strong>Demo</strong> · Esta es la conversación de ejemplo. Cambia entre vista cliente y negocio con el botón de arriba; nada se guarda en tu base de datos.
+ {{ else }}
+  <strong>Modo demo</strong> · Edita los datos del negocio a la izquierda y mira cómo el agente los usa. Nada se guarda al cerrar la pestaña.
+ {{ end }}
 </div>
 <div class="layout">
  <div class="sidebar" id="sidebar">
@@ -409,10 +464,13 @@ audio{width:100%;margin-top:.25rem;height:32px}
    <button type="button" onclick="resetBiz()">Restaurar ejemplo</button>
   </div>
  </div>
- <div class="chatpane">
+ <div class="chatpane" id="chatpane">
   <div class="phead">
    <div class="avatar" id="avatar">B</div>
-   <div><div class="name" id="bizName">{{ .Business.Name }}</div><div class="sub">simulador WhatsApp — sin número real</div></div>
+   <div style="flex:1"><div class="name" id="bizName">{{ .Business.Name }}</div><div class="sub">simulador WhatsApp — sin número real</div></div>
+   {{ if .IsAdmin }}
+   <button type="button" id="flipBtn" data-mode="customer" title="Cambiar perspectiva" style="margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,0.35);color:#fff;border-radius:14px;padding:.25rem .7rem;font-size:.78rem;cursor:pointer">Ver como negocio</button>
+   {{ end }}
   </div>
   <div class="chat" id="chat"></div>
   <form class="composer" onsubmit="return sendText(event)">
@@ -421,9 +479,18 @@ audio{width:100%;margin-top:.25rem;height:32px}
    <input type="text" id="text" value="Bonjour, qu'est-ce que la birria ?" placeholder="Escribe como si fueras un cliente" autocomplete="off">
    <button type="submit" title="Enviar">➤</button>
   </form>
+  <div class="preset-row" id="presetRow">
+   <button type="button" class="preset-btn" id="presetBtn" onclick="sendPresetVoice()" title="Mandar como nota de voz">▶ Enviar como nota de voz</button>
+   <button type="button" class="preset-btn" id="micBtn" onclick="toggleLiveMic()" title="Hablar y ver la transcripción en vivo">🎤 Dictar</button>
+  </div>
   <div class="cta-footer" id="ctaFoot">
+   {{ if .IsAdmin }}
+   <span>Demo · no afecta tus chats reales</span>
+   <a href="/admin">← Volver a conversaciones</a>
+   {{ else }}
    <span>¿Te gusta cómo responde?</span>
-   <a href="/signup">Conecta tu WhatsApp →</a>
+   <a href="/sign-up">Conecta tu WhatsApp →</a>
+   {{ end }}
   </div>
  </div>
 </div>
@@ -470,8 +537,9 @@ async function loadHistory() {
  const r = await fetch('/demo/history');
  const d = await r.json();
  chat.innerHTML = '';
- for (const m of d.messages) bubble(m.dir, m.body, null, null, m.kind);
- sentCount = (d.messages||[]).filter(m=>m.dir==='in').length;
+ const msgs = d.messages || [];
+ for (const m of msgs) bubble(m.dir, m.body, null, null, m.kind);
+ sentCount = msgs.filter(m=>m.dir==='in').length;
  if (sentCount === 0) {
   bubble('out', '¡Hola! Soy el agente de ' + bizName.textContent + '. Escríbeme como si fueras un cliente. Mándale al botón ➤ para probar la pregunta prellenada.');
  }
@@ -512,6 +580,37 @@ function onAfterSend(){
  if (sentCount >= 2 && bizEdited) highlightSignup();
 }
 
+// sendPresetVoice fetches the server-synthesized French preset audio and
+// posts it through the existing voice-note path, so the visitor sees
+// (and hears) the same flow a real customer would. In dev without an
+// ElevenLabs key the preset endpoint 404s and we fall back to sending
+// the same text via sendText so the demo still works.
+async function sendPresetVoice(){
+ const btn = document.getElementById('presetBtn');
+ const row = document.getElementById('presetRow');
+ btn.disabled = true;
+ try {
+  const audioRes = await fetch('/demo/preset.ogg');
+  if (!audioRes.ok) {
+   textInput.value = 'Bonjour, qu\'est-ce que la birria ?';
+   document.querySelector('.composer button[type=submit]').click();
+   return;
+  }
+  const blob = await audioRes.blob();
+  bubble('in', '🎙 [nota de voz]', null, null, 'audio');
+  const fd = new FormData();
+  fd.append('audio', blob, 'preset.ogg');
+  const r = await fetch('/demo/send', {method:'POST', body: fd});
+  if (!r.ok) { bubble('out', '[error '+r.status+']'); return; }
+  const d = await r.json();
+  if (d.transcript) bubble('out', '(transcripción: ' + d.transcript + ')');
+  bubble('out', d.reply, d.audio_b64, d.audio_mime);
+  onAfterSend();
+ } finally {
+  row.style.display = 'none';
+ }
+}
+
 async function saveBiz(ev) {
  ev.preventDefault();
  bizEdited = true;
@@ -543,10 +642,89 @@ async function resetBiz() {
  location.reload();
 }
 
+// Live-mic dictation. Streams 16kHz PCM16 mono to /demo/transcribe/ws and
+// pipes partial transcripts into the composer's text field. When the user
+// hits Dictar again we commit, wait for the final transcript, then stop.
+// In dev without a streaming provider configured the WS rejects with 503
+// and we surface a one-line note instead of breaking the rest of the demo.
+let micState = null;
+async function toggleLiveMic(){
+ const btn = document.getElementById('micBtn');
+ if (micState) { await stopLiveMic(); return; }
+ btn.disabled = true;
+ btn.textContent = '… conectando';
+ try {
+  const ws = new WebSocket(location.origin.replace(/^http/, 'ws') + '/demo/transcribe/ws');
+  ws.binaryType = 'arraybuffer';
+  await new Promise((res, rej) => {
+   ws.onopen = res;
+   ws.onerror = () => rej(new Error('no live transcription'));
+  });
+  const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+  const ctx = new (window.AudioContext || window.webkitAudioContext)({sampleRate: 16000});
+  const src = ctx.createMediaStreamSource(stream);
+  // Worklet code is a string we inline as a Blob URL so the demo stays
+  // single-file. Captures float32 frames, downscales to int16 PCM and
+  // posts the resulting buffer back to the main thread.
+  const workletCode = "class P extends AudioWorkletProcessor { process(inputs){ const ch = inputs[0][0]; if(!ch) return true; const out = new Int16Array(ch.length); for (let i=0;i<ch.length;i++){ const s = Math.max(-1, Math.min(1, ch[i])); out[i] = s < 0 ? s * 0x8000 : s * 0x7fff; } this.port.postMessage(out.buffer, [out.buffer]); return true; } } registerProcessor('chala-pcm', P);";
+  const blob = new Blob([workletCode], {type: 'application/javascript'});
+  await ctx.audioWorklet.addModule(URL.createObjectURL(blob));
+  const node = new AudioWorkletNode(ctx, 'chala-pcm');
+  node.port.onmessage = (ev) => { if (ws.readyState === 1) ws.send(ev.data); };
+  src.connect(node);
+  node.connect(ctx.destination); // satisfies graph; gain 0 in destination won't actually play mic back
+
+  ws.onmessage = (m) => {
+   try {
+    const d = JSON.parse(m.data);
+    if (d.kind === 'partial' || d.kind === 'final') {
+     textInput.value = d.text;
+    }
+    if (d.kind === 'final') { stopLiveMic(); }
+    if (d.kind === 'error') { console.warn('transcribe:', d.text); }
+   } catch(e){}
+  };
+  micState = {ws, ctx, stream, node, src};
+  btn.disabled = false;
+  btn.textContent = '⏹ Detener';
+ } catch (err) {
+  console.warn('mic:', err);
+  btn.disabled = false;
+  btn.textContent = '🎤 Dictar';
+  alert('Dictado en vivo no disponible. Usa el botón 🎙 para subir un archivo.');
+ }
+}
+async function stopLiveMic(){
+ if (!micState) return;
+ const s = micState;
+ micState = null;
+ try { s.node.disconnect(); s.src.disconnect(); } catch(e){}
+ try { s.stream.getTracks().forEach(t => t.stop()); } catch(e){}
+ try { if (s.ws.readyState === 1) s.ws.send(JSON.stringify({type:'commit'})); } catch(e){}
+ try { await s.ctx.close(); } catch(e){}
+ setTimeout(() => { try { s.ws.close(); } catch(e){} }, 500);
+ const btn = document.getElementById('micBtn');
+ btn.textContent = '🎤 Dictar';
+}
+
 // Any keystroke in the form counts as editing the business
 document.getElementById('bizform').addEventListener('input', () => { bizEdited = true; clearHighlight(); });
 sidebar.addEventListener('click', () => { if (sidebar.classList.contains('ringed')) clearHighlight(); });
 
 loadHistory();
+
+// Admin-only: flip toggle on the chat header. Toggles .from-business
+// on the chatpane; layout.ChatPaneStyles already styles both sides.
+(function(){
+ const btn = document.getElementById('flipBtn');
+ const pane = document.getElementById('chatpane');
+ if (!btn || !pane) return;
+ btn.addEventListener('click', () => {
+  const asBiz = btn.dataset.mode === 'customer';
+  pane.classList.toggle('from-business', asBiz);
+  btn.dataset.mode = asBiz ? 'business' : 'customer';
+  btn.textContent = asBiz ? 'Ver como cliente' : 'Ver como negocio';
+ });
+})();
 </script>
 </body></html>`))

@@ -57,9 +57,35 @@ func (b *BedrockEngine) Respond(ctx context.Context, req Request) (Reply, error)
 			Content: []map[string]interface{}{{"text": m.Text}},
 		})
 	}
+	// Build the incoming turn. Vision-capable Anthropic models on Bedrock
+	// take image content blocks of the form
+	//   {"image": {"format": "png", "source": {"bytes": <raw bytes>}}}
+	// alongside the text block. We attach any image bytes the pipeline
+	// downloaded; text-only attachments fall through harmlessly.
+	incomingContent := []map[string]interface{}{}
+	for _, att := range req.Incoming.Attachments {
+		if att.Kind != "image" || len(att.Bytes) == 0 {
+			continue
+		}
+		incomingContent = append(incomingContent, map[string]interface{}{
+			"image": map[string]interface{}{
+				"format": bedrockImageFormat(att.MimeType),
+				"source": map[string]interface{}{"bytes": att.Bytes},
+			},
+		})
+	}
+	// Always include a text block — Anthropic requires every user turn to
+	// have one. When the customer sent only an image with no caption, we
+	// fall back to a short Spanish hint so the model knows it's looking at
+	// a customer photo.
+	text := req.Incoming.Text
+	if strings.TrimSpace(text) == "" {
+		text = "[el cliente envió una imagen]"
+	}
+	incomingContent = append(incomingContent, map[string]interface{}{"text": text})
 	messages = append(messages, bedrockMessage{
 		Role:    "user",
-		Content: []map[string]interface{}{{"text": req.Incoming.Text}},
+		Content: incomingContent,
 	})
 
 	body := map[string]interface{}{"messages": messages}
@@ -221,6 +247,23 @@ func (f FallbackEngine) Respond(ctx context.Context, req Request) (Reply, error)
 }
 
 // ---- helpers ----
+
+// bedrockImageFormat maps a MIME type to the short format string the
+// Bedrock Converse API expects for image content blocks. Defaults to "jpeg"
+// when the MIME isn't one we recognise.
+func bedrockImageFormat(mime string) string {
+	switch strings.ToLower(mime) {
+	case "image/png":
+		return "png"
+	case "image/webp":
+		return "webp"
+	case "image/gif":
+		return "gif"
+	case "image/jpeg", "image/jpg":
+		return "jpeg"
+	}
+	return "jpeg"
+}
 
 func roleToBedrock(r Role) string {
 	if r == RoleAssistant {

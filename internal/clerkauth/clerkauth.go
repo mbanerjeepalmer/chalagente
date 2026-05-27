@@ -23,6 +23,7 @@ import (
 	"github.com/clerk/clerk-sdk-go/v2"
 	"github.com/clerk/clerk-sdk-go/v2/jwt"
 	"github.com/clerk/clerk-sdk-go/v2/user"
+	"github.com/mbanerjeepalmer/chalagente/internal/layout"
 )
 
 // FrontendAPIFromPublishableKey decodes the Clerk publishable key
@@ -283,18 +284,73 @@ var clerkPageTmpl = template.Must(template.New("clerk").Parse(`<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}} · Chalagente</title>
-  <style>
-    body { font-family: system-ui, -apple-system, sans-serif; margin: 0;
-           min-height: 100vh; display: flex; flex-direction: column;
-           align-items: center; justify-content: center; background: #faf6ef; }
-    h1 { font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 500;
-         color: #1a1a1a; margin-bottom: 1rem; }
-    #clerk-mount { min-height: 480px; min-width: 320px; }
+  ` + layout.FaviconLink + `
+  ` + layout.FontsLink + `
+  <style>` + layout.SharedStyles + `
+    /*
+     * The Clerk auth shell layers a flex centred wrapper on top of the
+     * shared landing chrome — the marketing nav stays sticky at the top,
+     * and the page body becomes a flex column so the auth-frame can fill
+     * the remaining viewport.
+     */
+    html,body{min-height:100vh}
+    body{display:flex; flex-direction:column}
+    main.shell{
+      flex:1; display:flex; align-items:center; justify-content:center;
+      padding:2rem 1.25rem;
+    }
+    .auth-frame{
+      display:flex; flex-direction:column; align-items:center; gap:1.25rem;
+      width:100%; max-width:480px;
+    }
+    h1.heading{
+      font-family:"Cormorant Garamond",Georgia,serif; font-weight:600;
+      color:var(--ink); margin:0; text-align:center;
+      font-size:clamp(1.8rem, 3vw, 2.4rem); letter-spacing:-0.005em; line-height:1.15;
+      /* Reserve vertical space so the Cormorant swap doesn't reflow the page. */
+      min-height:2.6rem;
+    }
+    /*
+     * #clerk-mount reserves the typical size of Clerk's <SignIn/> or
+     * <SignUp/> component so the widget doesn't shift layout when it
+     * mounts in. The skeleton inside is a placeholder that gets removed
+     * just before Clerk renders.
+     */
+    #clerk-mount{
+      width:100%; min-width:320px; min-height:480px;
+      display:flex; align-items:flex-start; justify-content:center;
+    }
+    .skeleton{
+      width:100%; min-height:480px;
+      background:var(--bone); border:1px solid var(--line); border-radius:10px;
+      box-shadow:0 1px 0 rgba(0,0,0,0.06), 0 12px 32px rgba(40,30,15,0.10);
+      padding:2rem; display:flex; flex-direction:column; gap:1rem;
+      animation:skel-fade 1.4s ease-in-out infinite alternate;
+    }
+    .skeleton .bar{background:rgba(28,26,22,0.08); border-radius:6px; height:14px}
+    .skeleton .bar.title{width:60%; height:20px; margin:.25rem auto 1rem}
+    .skeleton .bar.field{width:100%; height:42px}
+    .skeleton .bar.button{width:100%; height:42px; background:rgba(28,26,22,0.12); margin-top:1rem}
+    @keyframes skel-fade { 0%{opacity:.85} 100%{opacity:.55} }
   </style>
 </head>
 <body>
-  <h1>{{.Heading}}</h1>
-  <div id="clerk-mount"></div>
+  <header class="nav"><div class="container nav-inner">
+    ` + layout.LogoLink + `
+  </div></header>
+  <main class="shell">
+    <div class="auth-frame">
+      <h1 class="heading">{{.Heading}}</h1>
+      <div id="clerk-mount">
+        <div class="skeleton" aria-hidden="true">
+          <div class="bar title"></div>
+          <div class="bar"></div>
+          <div class="bar field"></div>
+          <div class="bar button"></div>
+        </div>
+      </div>
+    </div>
+  </main>
   <script
     async
     crossorigin="anonymous"
@@ -311,9 +367,14 @@ var clerkPageTmpl = template.Must(template.New("clerk").Parse(`<!doctype html>
         return;
       }
       const mount = document.getElementById('clerk-mount');
+      // Drop the skeleton placeholder before Clerk injects its widget so we
+      // don't end up with both stacked.
+      mount.replaceChildren();
       const opts = {
-        afterSignInUrl: {{.AfterSignInURL}},
-        afterSignUpUrl: {{.AfterSignInURL}},
+        // Clerk 5 prefers fallbackRedirectUrl over the deprecated afterSign*Url.
+        fallbackRedirectUrl: {{.AfterSignInURL}},
+        signInFallbackRedirectUrl: {{.AfterSignInURL}},
+        signUpFallbackRedirectUrl: {{.AfterSignInURL}},
       };
       {{if eq .Mode "sign-up"}}
       window.Clerk.mountSignUp(mount, opts);

@@ -113,6 +113,30 @@ ALTER TABLE users ADD COLUMN clerk_user_id TEXT;
 CREATE UNIQUE INDEX idx_users_clerk_user_id ON users(clerk_user_id) WHERE clerk_user_id IS NOT NULL;
 `,
 	},
+	{
+		name: "0003_trigger_required",
+		sql: `
+ALTER TABLE businesses ADD COLUMN trigger_required INTEGER NOT NULL DEFAULT 1;
+`,
+	},
+	{
+		name: "0004_wa_prefill",
+		sql: `
+ALTER TABLE businesses ADD COLUMN wa_prefill_template TEXT NOT NULL DEFAULT '';
+`,
+	},
+	{
+		name: "0005_wa_prefill_translations",
+		sql: `
+ALTER TABLE businesses ADD COLUMN wa_prefill_translations TEXT NOT NULL DEFAULT '{}';
+`,
+	},
+	{
+		name: "0006_conversation_agent_enabled",
+		sql: `
+ALTER TABLE conversations ADD COLUMN agent_enabled INTEGER NOT NULL DEFAULT 1;
+`,
+	},
 }
 
 // runMigrations applies any pending migrations, in order. It creates the

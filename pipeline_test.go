@@ -6,6 +6,27 @@ import (
 	"github.com/mbanerjeepalmer/chalagente/internal/store"
 )
 
+func TestVoiceIDForLang(t *testing.T) {
+	const builtinDefault = "21m00Tcm4TlvDq8ikWAM"
+	t.Setenv("ELEVENLABS_VOICE_DEFAULT", "")
+	t.Setenv("ELEVENLABS_VOICE_ES", "")
+	t.Setenv("ELEVENLABS_VOICE_EN", "")
+	if got := voiceIDForLang(""); got != builtinDefault {
+		t.Errorf("blank lang: got %q want builtin %q", got, builtinDefault)
+	}
+	if got := voiceIDForLang("es-MX"); got != builtinDefault {
+		t.Errorf("es-MX with no override: got %q", got)
+	}
+	t.Setenv("ELEVENLABS_VOICE_DEFAULT", "fallback")
+	t.Setenv("ELEVENLABS_VOICE_ES", "spanish")
+	if got := voiceIDForLang("es"); got != "spanish" {
+		t.Errorf("es with override: got %q want spanish", got)
+	}
+	if got := voiceIDForLang("en"); got != "fallback" {
+		t.Errorf("en without lang override falls to DEFAULT: got %q want fallback", got)
+	}
+}
+
 func TestChatHasTrigger(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -12,7 +12,7 @@ import (
 )
 
 func TestTryPageIsPublic(t *testing.T) {
-	a, _ := newTestApp(t)
+	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
 	defer srv.Close()
 
@@ -32,7 +32,7 @@ func TestTryPageIsPublic(t *testing.T) {
 }
 
 func TestTryPageSetsCookieAndLoadsDefaultBusiness(t *testing.T) {
-	a, _ := newTestApp(t)
+	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
 	defer srv.Close()
 
@@ -73,7 +73,7 @@ func TestTryPageSetsCookieAndLoadsDefaultBusiness(t *testing.T) {
 }
 
 func TestTrySendTextUsesDefaultBusinessHours(t *testing.T) {
-	a, _ := newTestApp(t)
+	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
 	defer srv.Close()
 
@@ -104,7 +104,7 @@ func TestTrySendTextUsesDefaultBusinessHours(t *testing.T) {
 }
 
 func TestTryEditBusinessChangesAgentReply(t *testing.T) {
-	a, _ := newTestApp(t)
+	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
 	defer srv.Close()
 
@@ -141,7 +141,7 @@ func TestTryEditBusinessChangesAgentReply(t *testing.T) {
 }
 
 func TestTrySendAudioReturnsTranscriptAndAudioReply(t *testing.T) {
-	a, _ := newTestApp(t)
+	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
 	defer srv.Close()
 
@@ -177,7 +177,7 @@ func TestTrySendAudioReturnsTranscriptAndAudioReply(t *testing.T) {
 }
 
 func TestTryHistoryAcrossRequests(t *testing.T) {
-	a, _ := newTestApp(t)
+	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
 	defer srv.Close()
 
@@ -209,7 +209,7 @@ func TestTryHistoryAcrossRequests(t *testing.T) {
 }
 
 func TestTryResetClearsHistoryButKeepsCookie(t *testing.T) {
-	a, _ := newTestApp(t)
+	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
 	defer srv.Close()
 
@@ -240,7 +240,7 @@ func TestTryResetClearsHistoryButKeepsCookie(t *testing.T) {
 }
 
 func TestLandingPointsToTry(t *testing.T) {
-	a, _ := newTestApp(t)
+	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
 	defer srv.Close()
 

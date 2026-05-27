@@ -9,9 +9,7 @@ import (
 	"syscall"
 
 	"github.com/mbanerjeepalmer/chalagente/internal/agent"
-	"github.com/mbanerjeepalmer/chalagente/internal/auth"
 	"github.com/mbanerjeepalmer/chalagente/internal/clerkauth"
-	"github.com/mbanerjeepalmer/chalagente/internal/maps"
 	"github.com/mbanerjeepalmer/chalagente/internal/store"
 	"github.com/mbanerjeepalmer/chalagente/internal/voice"
 	"github.com/mbanerjeepalmer/chalagente/internal/wamanager"
@@ -60,30 +58,34 @@ func main() {
 	app.Store = appStore
 	app.WAMgr = wam
 	app.Agent = buildAgent()
-	app.Voice = voice.NewCachedProvider(&voice.MockProvider{}, 256)
-	app.Maps = maps.DefaultMockClient()
+	// The translator is a thin closure over app.Agent — buildAgent already
+	// owns the Bedrock→Mistral→Mock fallback chain, so we don't introduce
+	// a second LLM hierarchy. When only MockEngine is available the JSON
+	// parse will fail and the dashboard will skip translations; the
+	// /go/<id> redirect falls back to the source template, which is what
+	// we want in dev/test.
+	app.Translator = agentTranslator(app.Agent)
+	elevenKey := os.Getenv("ELEVENLABS_API_KEY")
+	if elevenKey == "" {
+		log.Printf("voice: ELEVENLABS_API_KEY not set — STT/TTS calls will return a clear error")
+	}
+	app.Voice = voice.NewCachedProvider(&voice.ElevenLabsProvider{APIKey: elevenKey}, 256)
 	app.BaseURL = baseURL
 	cookieSecure := getenv("COOKIE_SECURE", "false") == "true"
-	if secret := os.Getenv("CLERK_SECRET_KEY"); secret != "" {
-		app.ClerkAuth = &clerkauth.Handlers{
-			SecretKey:      secret,
-			PublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
-			FrontendAPI:    os.Getenv("CLERK_FRONTEND_API"),
-			AfterSignInURL: getenv("CLERK_AFTER_SIGN_IN_URL", "/onboarding"),
-			Store:          &storeClerkAdapter{s: appStore},
-			CookieSecure:   cookieSecure,
-		}
-		app.ClerkAuth.Init()
-		log.Printf("auth: Clerk enabled (frontend_api=%s)", app.ClerkAuth.FrontendAPI)
-	} else {
-		app.Auth = &auth.Handlers{
-			Store:        &storeAuthAdapter{s: appStore},
-			Mailer:       auth.ConsoleMailer{Logf: log.Printf},
-			BaseURL:      baseURL,
-			CookieSecure: cookieSecure,
-		}
-		log.Printf("auth: magic-link (set CLERK_SECRET_KEY to enable Clerk)")
+	secret := os.Getenv("CLERK_SECRET_KEY")
+	if secret == "" {
+		log.Fatalf("auth: CLERK_SECRET_KEY is required (Clerk is the only auth provider)")
 	}
+	app.ClerkAuth = &clerkauth.Handlers{
+		SecretKey:      secret,
+		PublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
+		FrontendAPI:    os.Getenv("CLERK_FRONTEND_API"),
+		AfterSignInURL: getenv("CLERK_AFTER_SIGN_IN_URL", "/admin"),
+		Store:          &storeClerkAdapter{s: appStore},
+		CookieSecure:   cookieSecure,
+	}
+	app.ClerkAuth.Init()
+	log.Printf("auth: Clerk enabled (frontend_api=%s)", app.ClerkAuth.FrontendAPI)
 
 	wam.SetEventHandler(app.handleWAEvent)
 

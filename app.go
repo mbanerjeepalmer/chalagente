@@ -7,23 +7,20 @@ import (
 	"time"
 
 	"github.com/mbanerjeepalmer/chalagente/internal/agent"
-	"github.com/mbanerjeepalmer/chalagente/internal/auth"
 	"github.com/mbanerjeepalmer/chalagente/internal/clerkauth"
-	"github.com/mbanerjeepalmer/chalagente/internal/maps"
 	"github.com/mbanerjeepalmer/chalagente/internal/store"
 	"github.com/mbanerjeepalmer/chalagente/internal/voice"
 	"github.com/mbanerjeepalmer/chalagente/internal/wamanager"
 )
 
 type App struct {
-	Store    *store.Store
-	WAMgr    *wamanager.Manager
-	Agent    agent.Engine
-	Voice    voice.Provider
-	Maps     maps.Client
-	Auth      *auth.Handlers
-	ClerkAuth *clerkauth.Handlers
-	BaseURL   string
+	Store      *store.Store
+	WAMgr      *wamanager.Manager
+	Agent      agent.Engine
+	Voice      voice.Provider
+	Translator Translator
+	ClerkAuth  *clerkauth.Handlers
+	BaseURL    string
 
 	busMu  sync.Mutex
 	recent map[string][]Event
@@ -52,39 +49,33 @@ type pairSession struct {
 	deviceJID string
 	done      bool
 	cancel    context.CancelFunc
+	// codeCount counts how many "code" events whatsmeow has emitted on
+	// this session — each one is a refreshed QR. After pairQRMaxAuto
+	// codes the goroutine stops auto-refreshing and the UI prompts the
+	// user to press "Regenerar QR" (which calls /start again, opening a
+	// fresh session).
+	codeCount     int
+	needsManual   bool
 }
 
-// userIDFrom returns the authenticated local user id from the request
-// context, regardless of which auth provider populated it.
+// pairQRMaxAuto caps how many times the pairing QR auto-refreshes itself
+// before the user has to manually request a fresh code. WhatsApp issues a
+// new code roughly every 20s; three codes = ~1 minute of un-scanned QR,
+// after which we assume the page is sitting idle and stop spamming codes.
+const pairQRMaxAuto = 3
+
+// userIDFrom returns the authenticated local user id injected by the
+// Clerk middleware.
 func (a *App) userIDFrom(r *http.Request) (string, bool) {
-	if a.ClerkAuth != nil {
-		if id, ok := a.ClerkAuth.UserIDFrom(r.Context()); ok {
-			return id, true
-		}
-	}
-	if a.Auth != nil {
-		if id, ok := a.Auth.UserIDFrom(r.Context()); ok {
-			return id, true
-		}
-	}
-	return "", false
+	return a.ClerkAuth.UserIDFrom(r.Context())
 }
 
 // signInPath returns the URL path to redirect unauthenticated users to.
-func (a *App) signInPath() string {
-	if a.ClerkAuth != nil {
-		return "/sign-in"
-	}
-	return "/signup"
-}
+func (a *App) signInPath() string { return "/sign-in" }
 
-// authMiddleware returns the active auth middleware. Panics if neither
-// auth provider is configured (only happens in misconfigured runtime).
+// authMiddleware returns the Clerk auth middleware. ClerkAuth must be set.
 func (a *App) authMiddleware(next http.Handler) http.Handler {
-	if a.ClerkAuth != nil {
-		return a.ClerkAuth.Middleware(next)
-	}
-	return a.Auth.Middleware(next)
+	return a.ClerkAuth.Middleware(next)
 }
 
 func newApp() *App {
@@ -112,6 +103,15 @@ func (a *App) publish(e Event) {
 		default:
 		}
 	}
+}
+
+// clearRecent drops the in-memory recent-event buffer for businessID. Used
+// after the persisted chat history is deleted so the live feed in the
+// dashboard reflects the same empty state.
+func (a *App) clearRecent(businessID string) {
+	a.busMu.Lock()
+	defer a.busMu.Unlock()
+	delete(a.recent, businessID)
 }
 
 func (a *App) subscribe(businessID string) (chan Event, []Event, func()) {

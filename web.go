@@ -6,7 +6,10 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strings"
 	"time"
+
+	"github.com/mbanerjeepalmer/chalagente/internal/layout"
 )
 
 func (a *App) Mux() http.Handler {
@@ -16,49 +19,54 @@ func (a *App) Mux() http.Handler {
 	mux.HandleFunc("/privacidad", a.handlePrivacy)
 	mux.HandleFunc("/terminos", a.handleTerms)
 
-	if a.ClerkAuth != nil {
-		mux.HandleFunc("GET /sign-in", a.ClerkAuth.SignInPage)
-		mux.HandleFunc("GET /sign-up", a.ClerkAuth.SignUpPage)
-		mux.HandleFunc("POST /logout", a.ClerkAuth.Logout)
-		mux.HandleFunc("GET /signup", func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, "/sign-up", http.StatusSeeOther)
-		})
-	} else {
-		mux.HandleFunc("GET /signup", a.Auth.SignupForm)
-		mux.HandleFunc("POST /signup", a.Auth.SignupSubmit)
-		mux.HandleFunc("/auth/verify", a.Auth.Verify)
-		mux.HandleFunc("POST /logout", a.Auth.Logout)
-	}
+	mux.HandleFunc("GET /sign-in", a.ClerkAuth.SignInPage)
+	mux.HandleFunc("GET /sign-up", a.ClerkAuth.SignUpPage)
+	mux.HandleFunc("POST /logout", a.ClerkAuth.Logout)
+	// Legacy /signup → /sign-up so any old links keep working.
+	mux.HandleFunc("GET /signup", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/sign-up", http.StatusSeeOther)
+	})
+
+	// /go/{id} is the public customer-facing redirect — a wa.me wrapper
+	// that prefills the customer's first message. Kept on the unauthed
+	// mux because the whole point is anyone with the link can click it.
+	mux.HandleFunc("GET /go/{id}", a.handleShareRedirect)
 
 	mux.HandleFunc("/demo", a.handleTryPage)
 	mux.HandleFunc("/demo/business", a.handleTryBusiness)
 	mux.HandleFunc("/demo/send", a.handleTrySend)
 	mux.HandleFunc("/demo/history", a.handleTryHistory)
 	mux.HandleFunc("/demo/reset", a.handleTryReset)
+	mux.HandleFunc("GET /demo/preset.ogg", a.handleTryPresetAudio)
+	mux.HandleFunc("/demo/transcribe/ws", a.handleTryTranscribeWS)
 
 	protected := http.NewServeMux()
-	protected.HandleFunc("/onboarding", a.handleOnboarding)
-	protected.HandleFunc("/onboarding/business", a.handleOnboardingBusiness)
-	protected.HandleFunc("/onboarding/extra", a.handleOnboardingExtra)
-	protected.HandleFunc("/onboarding/whatsapp", a.handleOnboardingWhatsApp)
-	protected.HandleFunc("/onboarding/whatsapp/start", a.handleOnboardingWhatsAppStart)
-	protected.HandleFunc("/onboarding/whatsapp/qr.png", a.handleOnboardingQRPNG)
-	protected.HandleFunc("/onboarding/whatsapp/status", a.handleOnboardingPairStatus)
-	protected.HandleFunc("/onboarding/test", a.handleOnboardingTest)
-	protected.HandleFunc("/onboarding/finish", a.handleOnboardingFinish)
 
-	protected.HandleFunc("/app", a.handleDashboard)
+	// Canonical admin routes — /admin/* is the source of truth.
 	protected.HandleFunc("/admin", a.handleDashboard)
-	protected.HandleFunc("/app/agent", a.handleDashboardAgentToggle)
-	protected.HandleFunc("/app/business", a.handleDashboardBusiness)
-	protected.HandleFunc("/app/events", a.handleDashboardEvents)
-	protected.HandleFunc("/app/qr.png", a.handleDashboardShareQR)
-	protected.HandleFunc("POST /app/whatsapp/unpair", a.handleDashboardUnpair)
+	protected.HandleFunc("GET /admin/connection", a.handleAdminConnection)
+	// Pair endpoints alongside /admin/connection so the connection screen
+	// owns its own state without bouncing into the /onboarding wizard.
+	// Same handlers as the wizard's endpoints; the wizard routes will be
+	// removed in a follow-up.
+	protected.HandleFunc("POST /admin/connection/pair", a.handleOnboardingWhatsAppStart)
+	protected.HandleFunc("GET /admin/connection/qr.png", a.handleOnboardingQRPNG)
+	protected.HandleFunc("GET /admin/connection/pair/status", a.handleOnboardingPairStatus)
+	protected.HandleFunc("GET /admin/conversations/{id}", a.handleDashboardConversation)
+	protected.HandleFunc("POST /admin/conversations/{id}/agent", a.handleConversationAgentToggle)
+	protected.HandleFunc("/admin/agent", a.handleDashboardAgentToggle)
+	protected.HandleFunc("POST /admin/trigger", a.handleDashboardTriggerToggle)
+	protected.HandleFunc("/admin/business", a.handleDashboardBusiness)
+	protected.HandleFunc("/admin/events", a.handleDashboardEvents)
+	protected.HandleFunc("/admin/qr.png", a.handleDashboardShareQR)
+	protected.HandleFunc("POST /admin/whatsapp/unpair", a.handleDashboardUnpair)
 
-	mux.Handle("/onboarding", a.authMiddleware(protected))
-	mux.Handle("/onboarding/", a.authMiddleware(protected))
-	mux.Handle("/app", a.authMiddleware(protected))
-	mux.Handle("/app/", a.authMiddleware(protected))
+	// Legacy /app/* paths 308 → /admin/*. 308 preserves method+body so
+	// any old bookmarks, form posts, or QR codes targeting the previous
+	// namespace keep working without losing data.
+	mux.HandleFunc("/app", redirectToAdmin)
+	mux.HandleFunc("/app/", redirectToAdmin)
+
 	mux.Handle("/admin", a.authMiddleware(protected))
 	mux.Handle("/admin/", a.authMiddleware(protected))
 
@@ -69,6 +77,17 @@ func (a *App) serveHTTP(addr string) {
 	if err := http.ListenAndServe(addr, a.Mux()); err != nil {
 		log.Printf("http server: %v", err)
 	}
+}
+
+// redirectToAdmin permanently forwards /app/<rest> to /admin/<rest>, query
+// string included. Uses 308 (permanent redirect, preserves method + body)
+// so POSTs to legacy /app/* keep their form data on the way through.
+func redirectToAdmin(w http.ResponseWriter, r *http.Request) {
+	target := "/admin" + strings.TrimPrefix(r.URL.Path, "/app")
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery
+	}
+	http.Redirect(w, r, target, http.StatusPermanentRedirect)
 }
 
 func (a *App) handleLanding(w http.ResponseWriter, r *http.Request) {
@@ -112,86 +131,18 @@ func writeSSE(w http.ResponseWriter, payload any) {
 
 func nowMillis() int64 { return time.Now().UnixNano() }
 
-// Diego Rivera "Fraternidad" palette: terracotta, ochre, indigo, deep green,
-// warm bone-white wall. Serif headings (painted-on-wall feel), gallery sans body.
-const sharedStyles = `
-:root {
-  --wall: #f1ead9;
-  --wall-shade: #e6dec7;
-  --plaster: #ece2cb;
-  --ink: #1c1a16;
-  --ink-soft: #3a352c;
-  --muted: #6b6354;
-  --line: rgba(28,26,22,0.14);
-  --terracotta: #b5482e;
-  --terracotta-deep: #8a3320;
-  --ochre: #c8932b;
-  --indigo: #25406e;
-  --leaf: #4f6a3a;
-  --bone: #faf6ea;
-  --radius: 6px;
-}
-* { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; }
-body {
-  font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  background: var(--wall);
-  color: var(--ink-soft);
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-  background-image:
-    radial-gradient(rgba(110,90,60,0.05) 1px, transparent 1px),
-    radial-gradient(rgba(80,60,40,0.04) 1px, transparent 1px),
-    linear-gradient(180deg, var(--wall), var(--wall-shade));
-  background-size: 3px 3px, 7px 7px, 100% 100%;
-  background-position: 0 0, 1px 2px, 0 0;
-}
-h1, h2, h3, h4 {
-  font-family: "Cormorant Garamond", "Playfair Display", Georgia, "Times New Roman", serif;
-  color: var(--ink);
-  font-weight: 600;
-  letter-spacing: -0.005em;
-  line-height: 1.15;
-}
-a { color: var(--terracotta-deep); }
-.container { max-width: 1080px; margin: 0 auto; padding: 0 1.5rem; }
-header.nav {
-  position: sticky; top: 0; z-index: 10;
-  background: rgba(241,234,217,0.92);
-  backdrop-filter: blur(6px);
-  border-bottom: 1px solid var(--line);
-}
-.nav-inner { display: flex; align-items: center; justify-content: space-between; padding: 1rem 0; }
-.logo { display: flex; align-items: center; gap: .6rem; font-family: "Cormorant Garamond", serif; font-weight: 700; font-size: 1.35rem; color: var(--ink); text-decoration: none; letter-spacing: .01em; }
-.logo-mark {
-  width: 30px; height: 30px; border-radius: 50%;
-  background: var(--terracotta);
-  display: grid; place-items: center; color: var(--bone);
-  font-family: "Cormorant Garamond", serif; font-weight: 700; font-size: 1rem;
-  box-shadow: inset 0 -2px 0 rgba(0,0,0,0.15);
-}
-.nav-links { display: flex; gap: 1.4rem; align-items: center; font-size: .92rem; color: var(--ink-soft); }
-.nav-links a { color: var(--ink-soft); text-decoration: none; }
-.nav-links a:hover { color: var(--terracotta-deep); }
-.btn {
-  display: inline-flex; align-items: center; gap: .5rem;
-  padding: .7rem 1.2rem; border-radius: var(--radius);
-  font-weight: 600; font-size: .95rem; text-decoration: none;
-  transition: transform .12s ease, box-shadow .15s ease;
-  border: 1px solid transparent;
-}
-.btn-primary { background: var(--terracotta); color: var(--bone); box-shadow: 0 2px 0 var(--terracotta-deep); }
-.btn-primary:hover { transform: translateY(-1px); }
-.btn-ghost { background: transparent; color: var(--ink); border-color: var(--ink); }
-.btn-ghost:hover { background: rgba(28,26,22,0.05); }
-footer { padding: 2rem 0 2.5rem; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--line); margin-top: 3rem; }
-footer .container { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
-footer a { color: var(--muted); text-decoration: none; margin-right: 1rem; }
-footer a:hover { color: var(--ink); }
-@media (max-width: 720px) {
-  .nav-links a:not(.btn) { display: none; }
-}
-`
+// faviconDataURI, githubURL and sharedStyles used to live here; the
+// canonical copies are now in internal/layout. These aliases keep this
+// file's templates readable without a tree of layout.* fully-qualified
+// references inside the inline HTML strings.
+const (
+	faviconDataURI = layout.FaviconDataURI
+	githubURL      = layout.GithubURL
+)
+
+// sharedStyles is a local alias for layout.SharedStyles so the inline
+// landing/legal templates can keep concatenating it as a Go string.
+const sharedStyles = layout.SharedStyles
 
 var landingTmpl = template.Must(template.New("landing").Parse(`<!doctype html>
 <html lang="es-MX">
@@ -199,7 +150,8 @@ var landingTmpl = template.Must(template.New("landing").Parse(`<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Chalagente — Un agente IA que es tu chalán</title>
-<meta name="description" content="Chalagente atiende a tus clientes por WhatsApp 24/7. Para puestos de comida, electricistas, agencias de viaje y más.">
+<meta name="description" content="Chalagente atiende a tus clientes en su idioma, por WhatsApp. Para puestos de comida, electricistas, agencias de viaje y más.">
+<link rel="icon" href="` + faviconDataURI + `">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -210,17 +162,69 @@ h1.hero-title { font-size: clamp(2.4rem, 5vw, 3.8rem); margin: 0 0 1rem; color: 
 h1.hero-title .accent { color: var(--terracotta-deep); font-style: italic; }
 .hero-sub { font-size: 1.15rem; color: var(--ink-soft); max-width: 32rem; margin: 0 0 1.75rem; }
 .hero-cta { display: flex; gap: .75rem; flex-wrap: wrap; }
-.muralcard {
-  background: var(--bone);
+.wa-mock {
+  background: #ece5dd;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 1.5rem 1.6rem;
-  box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 8px 28px rgba(40,30,15,0.08);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06), 0 12px 32px rgba(40,30,15,0.14);
+  transform: rotate(-0.6deg);
+  position: relative;
 }
-.muralcard .stripe { display: flex; height: 6px; margin: -1.5rem -1.6rem 1.2rem; border-radius: var(--radius) var(--radius) 0 0; overflow: hidden; }
-.muralcard .stripe span { flex: 1; }
-.muralcard h3 { margin: .25rem 0 .5rem; font-size: 1.4rem; }
-.muralcard p { margin: 0; color: var(--ink-soft); }
+.wa-mock::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, transparent 78%, rgba(241,234,217,0.95));
+}
+.wa-mock-head {
+  display: flex; align-items: center; gap: .55rem;
+  padding: .65rem .85rem;
+  background: #075e54; color: white;
+}
+.wa-mock-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: #25d366; color: #04130b;
+  display: grid; place-items: center;
+  font-family: "Cormorant Garamond", serif; font-weight: 700;
+}
+.wa-mock-meta { flex: 1; line-height: 1.2; }
+.wa-mock-name { font-weight: 600; font-size: .95rem; }
+.wa-mock-sub { font-size: .72rem; opacity: .85; }
+.wa-langs { display: flex; gap: .25rem; }
+.wa-lang {
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: white;
+  padding: .2rem .35rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: .95rem;
+  line-height: 1;
+}
+.wa-lang.active { background: rgba(255,255,255,0.28); border-color: white; }
+.flagstack { letter-spacing: -0.35em; padding-right: .35em; }
+.wa-mock-body {
+  background: #ece5dd;
+  background-image:
+    radial-gradient(rgba(80,60,40,0.05) 1px, transparent 1px);
+  background-size: 4px 4px;
+  padding: 1rem .9rem 1.6rem;
+  display: flex; flex-direction: column; gap: .4rem;
+  min-height: 230px;
+}
+.wa-bubble {
+  max-width: 82%;
+  padding: .5rem .7rem;
+  font-size: .92rem; color: #1c1a16;
+  border-radius: 10px;
+  box-shadow: 0 1px 1px rgba(0,0,0,.08);
+  line-height: 1.4;
+}
+.wa-bubble.in { background: #dcf8c6; align-self: flex-end; border-bottom-right-radius: 2px; }
+.wa-bubble.out { background: white; align-self: flex-start; border-bottom-left-radius: 2px; }
+.wa-mock-foot {
+  padding: .45rem .9rem .65rem; font-size: .72rem; color: var(--muted);
+  background: var(--bone); border-top: 1px solid var(--line); text-align: center;
+}
 section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
 .section-head { max-width: 38rem; margin: 0 auto 2.5rem; text-align: center; }
 .section-head h2 { font-size: clamp(2rem, 3.5vw, 2.6rem); margin: 0 0 .5rem; }
@@ -265,7 +269,7 @@ section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
       <a href="#para-quien">Para quién</a>
       <a href="#como">Cómo funciona</a>
       <a href="/demo">Demo</a>
-      <a href="/signup">Iniciar sesión</a>
+      <a href="/sign-in">Iniciar sesión</a>
       <a href="/demo" class="btn btn-primary">Probar demo</a>
     </nav>
   </div>
@@ -275,23 +279,56 @@ section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
   <div class="container hero-grid">
     <div>
       <h1 class="hero-title">Un agente IA<br><span class="accent">que es tu chalán</span></h1>
-      <p class="hero-sub">Chalagente atiende a tus clientes por WhatsApp con tu información, tus horarios y tu manera de hablar. Tú haces lo tuyo; él contesta.</p>
+      <p class="hero-sub">Chalagente atiende a tus clientes <strong>en su idioma</strong>, por WhatsApp. Tú haces lo tuyo; él contesta.</p>
       <div class="hero-cta">
         <a href="/demo" class="btn btn-primary">Probar demo →</a>
-        <a href="/signup" class="btn btn-ghost">Iniciar sesión</a>
+        <a href="/sign-in" class="btn btn-ghost">Iniciar sesión</a>
       </div>
     </div>
-    <aside class="muralcard">
-      <div class="stripe">
-        <span style="background:var(--terracotta)"></span>
-        <span style="background:var(--ochre)"></span>
-        <span style="background:var(--leaf)"></span>
-        <span style="background:var(--indigo)"></span>
-        <span style="background:var(--bone)"></span>
+    <aside class="wa-mock" aria-label="Vista previa de conversación">
+      <div class="wa-mock-head">
+        <div class="wa-mock-avatar">B</div>
+        <div class="wa-mock-meta">
+          <div class="wa-mock-name">Birrias El Chalán</div>
+          <div class="wa-mock-sub">en línea</div>
+        </div>
+        <div class="wa-langs" role="tablist" aria-label="Idioma">
+          <button type="button" class="wa-lang active" data-lang="en" role="tab" aria-selected="true" title="English">
+            <span class="flagstack">🇬🇧🇺🇸🇨🇦</span>
+          </button>
+          <button type="button" class="wa-lang" data-lang="es" role="tab" aria-selected="false" title="Español">
+            <span class="flagstack">🇲🇽🇨🇴🇪🇸</span>
+          </button>
+        </div>
       </div>
-      <h3>“¿A qué hora abren mañana?”</h3>
-      <p>Tu cliente pregunta por WhatsApp. Chalagente responde al instante con la información de tu negocio — texto, voz, foto o video.</p>
+      <div class="wa-mock-body">
+        <div class="wa-bubble in" data-lang="en">What is a birria taco? What makes yours special?</div>
+        <div class="wa-bubble in" data-lang="es" hidden>¿Qué es un taco de birria? ¿Qué hace especial el de ustedes?</div>
+        <div class="wa-bubble out" data-lang="en">
+          <strong>Slow-cooked goat stew in a tortilla.</strong><br>
+          Ours is marinated 24h in a secret guajillo-ancho rub — try it as a quesabirria with consomé on the side.
+        </div>
+        <div class="wa-bubble out" data-lang="es" hidden>
+          <strong>Estofado de chivo en tortilla.</strong><br>
+          La nuestra se marina 24h con un recado secreto de guajillo y ancho — pruébala en quesabirria con consomé aparte.
+        </div>
+      </div>
+      <div class="wa-mock-foot">simulación · responde en el idioma del cliente</div>
     </aside>
+  </div>
+</section>
+
+<section id="como" class="block">
+  <div class="container">
+    <div class="section-head">
+      <h2>Cómo funciona</h2>
+      <p>Tres pasos. Sin instalar nada. Sin código.</p>
+    </div>
+    <div class="steps">
+      <div class="step"><span class="num">1</span><h3>Cuéntale de tu negocio</h3><p>Escribe — o dicta con tu voz — quién eres, qué vendes y cómo atiendes.</p></div>
+      <div class="step"><span class="num">2</span><h3>Conecta tu WhatsApp</h3><p>Escanea el código QR desde la app, como un dispositivo más.</p></div>
+      <div class="step"><span class="num">3</span><h3>Chalagente responde</h3><p>Cuando un cliente menciona «Chalagente» en su mensaje, el agente contesta con tu información. Una vez mencionado en la conversación, sigue respondiendo a los siguientes mensajes.</p></div>
+    </div>
   </div>
 </section>
 
@@ -321,20 +358,6 @@ section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
   </div>
 </section>
 
-<section id="como" class="block">
-  <div class="container">
-    <div class="section-head">
-      <h2>Cómo funciona</h2>
-      <p>Tres pasos. Sin instalar nada. Sin código.</p>
-    </div>
-    <div class="steps">
-      <div class="step"><span class="num">1</span><h3>Cuéntale de tu negocio</h3><p>Escribe — o dicta con tu voz — quién eres, qué vendes y cómo atiendes.</p></div>
-      <div class="step"><span class="num">2</span><h3>Conecta tu WhatsApp</h3><p>Escanea el código QR desde la app, como un dispositivo más.</p></div>
-      <div class="step"><span class="num">3</span><h3>Chalagente responde</h3><p>Cuando un cliente menciona «Chalagente» en su mensaje, el agente contesta con tu información. Una vez mencionado en la conversación, sigue respondiendo a los siguientes mensajes.</p></div>
-    </div>
-  </div>
-</section>
-
 <section class="block">
   <div class="container">
     <div class="section-head">
@@ -357,17 +380,20 @@ section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
   </div>
 </section>
 
-<footer>
-  <div class="container">
-    <span>© Chalagente · Hecho en México</span>
-    <span>
-      <a href="/privacidad">Aviso de privacidad</a>
-      <a href="/terminos">Términos</a>
-      <a href="/demo">Demo</a>
-      <a href="/signup">Iniciar sesión</a>
-    </span>
-  </div>
-</footer>
+` + layout.FooterMarketingHTML + `
+<script>
+(function(){
+  const btns = document.querySelectorAll('.wa-lang');
+  if (!btns.length) return;
+  btns.forEach(b => b.addEventListener('click', () => {
+    const lang = b.dataset.lang;
+    btns.forEach(x => { x.classList.toggle('active', x === b); x.setAttribute('aria-selected', x === b); });
+    document.querySelectorAll('.wa-bubble[data-lang]').forEach(el => {
+      el.hidden = el.dataset.lang !== lang;
+    });
+  }));
+})();
+</script>
 </body>
 </html>`))
 
@@ -397,6 +423,7 @@ var legalTmpl = template.Must(template.New("legal").Parse(`<!doctype html>
 <html lang="es-MX"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ .Title }} — Chalagente</title>
+<link rel="icon" href="` + faviconDataURI + `">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>` + sharedStyles + `
 .legal { max-width: 680px; margin: 3rem auto; padding: 0 1.5rem; }
@@ -406,14 +433,11 @@ var legalTmpl = template.Must(template.New("legal").Parse(`<!doctype html>
 </style></head><body>
 <header class="nav"><div class="container nav-inner">
   <a class="logo" href="/"><span class="logo-mark">C</span><span>Chalagente</span></a>
-  <nav class="nav-links"><a href="/demo">Demo</a><a href="/signup">Iniciar sesión</a></nav>
+  <nav class="nav-links"><a href="/demo">Demo</a><a href="/sign-in">Iniciar sesión</a></nav>
 </div></header>
 <main class="legal">
   <h1>{{ .Title }}</h1>
   {{ .Body }}
 </main>
-<footer><div class="container">
-  <span>© Chalagente</span>
-  <span><a href="/privacidad">Aviso de privacidad</a><a href="/terminos">Términos</a></span>
-</div></footer>
+` + layout.FooterLegalHTML + `
 </body></html>`))
