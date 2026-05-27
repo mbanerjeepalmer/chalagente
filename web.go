@@ -253,6 +253,9 @@ section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
   font-size: .95rem;
   color: var(--ink);
 }
+.video-wrap { max-width: 880px; margin: 0 auto; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(40,30,15,0.14); }
+.video-frame { position: relative; padding-top: 56.25%; background: #000; }
+.video-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .cta-block { background: var(--bone); border: 1px solid var(--line); border-radius: var(--radius); padding: 2.5rem; text-align: center; }
 .cta-block h2 { margin: 0 0 .5rem; font-size: 2rem; }
 .cta-block p { color: var(--muted); margin: 0 0 1.5rem; }
@@ -376,6 +379,20 @@ section.block { padding: 4rem 0; border-top: 1px solid var(--line); }
       <h2>Pruébalo ahora</h2>
       <p>Chatea con un agente prellenado en cinco segundos. Sin registro.</p>
       <a href="/demo" class="btn btn-primary">Abrir demo →</a>
+    </div>
+  </div>
+</section>
+
+<section class="block">
+  <div class="container">
+    <div class="section-head">
+      <h2>Mira cómo funciona</h2>
+      <p>Un minuto para ver a Chalagente atendiendo a un cliente.</p>
+    </div>
+    <div class="video-wrap">
+      <div class="video-frame">
+        <iframe src="https://player.vimeo.com/video/1195409693" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen title="Chalagente — demo"></iframe>
+      </div>
     </div>
   </div>
 </section>

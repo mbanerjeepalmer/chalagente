@@ -114,6 +114,22 @@ func TestLandingPageHasSignInCTA(t *testing.T) {
 	}
 }
 
+func TestLandingPageEmbedsVimeoVideo(t *testing.T) {
+	a := newTestApp(t)
+	srv := httptest.NewServer(a.Mux())
+	defer srv.Close()
+
+	res, err := http.Get(srv.URL + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if !strings.Contains(string(body), "player.vimeo.com/video/1195409693") {
+		t.Fatalf("landing missing Vimeo embed for video 1195409693")
+	}
+}
+
 func TestHealthCheck(t *testing.T) {
 	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
