@@ -145,9 +145,17 @@ func (a *App) handleTryPage(w http.ResponseWriter, r *http.Request) {
 	biz := ses.Business
 	ses.mu.Unlock()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tryTmpl.Execute(w, struct{ Business tryBusiness }{biz}); err != nil {
+	if err := tryTmpl.Execute(w, tryView{Business: biz}); err != nil {
 		log.Printf("tryTmpl: %v", err)
 	}
+}
+
+// tryView is the data shape rendered into tryTmpl. IsAdmin swaps the
+// marketing chrome for the admin nav and adds the customer/business
+// flip toggle — see /admin/conversations/demo.
+type tryView struct {
+	Business tryBusiness
+	IsAdmin  bool
 }
 
 func (a *App) handleTryBusiness(w http.ResponseWriter, r *http.Request) {
@@ -417,13 +425,25 @@ body{background-size: 3px 3px, 100% 100%}
 </head><body>
 <div class="topbar">
  <a class="logo" href="/"><span class="logo-mark">C</span><span>Chalagente</span></a>
+ {{ if .IsAdmin }}
+ <nav style="display:flex;gap:1.1rem;align-items:center;font-size:.92rem">
+  <a href="/admin">Conversaciones</a>
+  <a href="/admin/connection">Conexión</a>
+  <a href="/admin/business">Información</a>
+ </nav>
+ {{ else }}
  <div style="display:flex;gap:.6rem;align-items:center">
   <a href="/sign-in" style="font-size:.92rem">Iniciar sesión</a>
   <a class="btn" href="/sign-up">Crear cuenta →</a>
  </div>
+ {{ end }}
 </div>
 <div class="banner">
- <strong>Modo demo</strong> · Edita los datos del negocio a la izquierda y mira cómo el agente los usa. Nada se guarda al cerrar la pestaña.
+ {{ if .IsAdmin }}
+  <strong>Demo</strong> · Esta es la conversación de ejemplo. Cambia entre vista cliente y negocio con el botón de arriba; nada se guarda en tu base de datos.
+ {{ else }}
+  <strong>Modo demo</strong> · Edita los datos del negocio a la izquierda y mira cómo el agente los usa. Nada se guarda al cerrar la pestaña.
+ {{ end }}
 </div>
 <div class="layout">
  <div class="sidebar" id="sidebar">
@@ -444,10 +464,13 @@ body{background-size: 3px 3px, 100% 100%}
    <button type="button" onclick="resetBiz()">Restaurar ejemplo</button>
   </div>
  </div>
- <div class="chatpane">
+ <div class="chatpane" id="chatpane">
   <div class="phead">
    <div class="avatar" id="avatar">B</div>
-   <div><div class="name" id="bizName">{{ .Business.Name }}</div><div class="sub">simulador WhatsApp — sin número real</div></div>
+   <div style="flex:1"><div class="name" id="bizName">{{ .Business.Name }}</div><div class="sub">simulador WhatsApp — sin número real</div></div>
+   {{ if .IsAdmin }}
+   <button type="button" id="flipBtn" data-mode="customer" title="Cambiar perspectiva" style="margin-left:auto;background:transparent;border:1px solid rgba(255,255,255,0.35);color:#fff;border-radius:14px;padding:.25rem .7rem;font-size:.78rem;cursor:pointer">Ver como negocio</button>
+   {{ end }}
   </div>
   <div class="chat" id="chat"></div>
   <form class="composer" onsubmit="return sendText(event)">
@@ -461,8 +484,13 @@ body{background-size: 3px 3px, 100% 100%}
    <button type="button" class="preset-btn" id="micBtn" onclick="toggleLiveMic()" title="Hablar y ver la transcripción en vivo">🎤 Dictar</button>
   </div>
   <div class="cta-footer" id="ctaFoot">
+   {{ if .IsAdmin }}
+   <span>Demo · no afecta tus chats reales</span>
+   <a href="/admin">← Volver a conversaciones</a>
+   {{ else }}
    <span>¿Te gusta cómo responde?</span>
    <a href="/sign-up">Conecta tu WhatsApp →</a>
+   {{ end }}
   </div>
  </div>
 </div>
@@ -684,5 +712,19 @@ document.getElementById('bizform').addEventListener('input', () => { bizEdited =
 sidebar.addEventListener('click', () => { if (sidebar.classList.contains('ringed')) clearHighlight(); });
 
 loadHistory();
+
+// Admin-only: flip toggle on the chat header. Toggles .from-business
+// on the chatpane; layout.ChatPaneStyles already styles both sides.
+(function(){
+ const btn = document.getElementById('flipBtn');
+ const pane = document.getElementById('chatpane');
+ if (!btn || !pane) return;
+ btn.addEventListener('click', () => {
+  const asBiz = btn.dataset.mode === 'customer';
+  pane.classList.toggle('from-business', asBiz);
+  btn.dataset.mode = asBiz ? 'business' : 'customer';
+  btn.textContent = asBiz ? 'Ver como cliente' : 'Ver como negocio';
+ });
+})();
 </script>
 </body></html>`))

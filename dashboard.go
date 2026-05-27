@@ -171,7 +171,14 @@ type convoRow struct {
 	UpdatedAt   time.Time
 	LastBody    string
 	LastDir     string
+	IsDemo      bool
 }
+
+// demoConvoID is the synthetic conversation slug for the always-present
+// demo chat under /admin/conversations/. It never appears in the
+// conversations table — the row is added by handleDashboard and the
+// viewer renders the existing /demo template with admin chrome.
+const demoConvoID = "demo"
 
 func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	b, ok := a.requireBusiness(w, r)
@@ -187,7 +194,19 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("dashboard convos: %v", err)
 	}
-	rows := make([]convoRow, 0, len(convos))
+	rows := make([]convoRow, 0, len(convos)+1)
+	// Synthetic demo row, always first. Spec: "One of them should still be
+	// the demo… on the demo we simply have an empty state for the second
+	// conversation in the list ('Connect your WhatsApp for more
+	// conversations')."
+	rows = append(rows, convoRow{
+		ID:          demoConvoID,
+		CustomerJID: "Demo · " + defaultTryBusiness().Name,
+		UpdatedAt:   time.Now(),
+		LastBody:    "Chatea como cliente o flip a vista negocio",
+		LastDir:     "out",
+		IsDemo:      true,
+	})
 	for _, c := range convos {
 		msgs, _ := a.Store.ListMessages(r.Context(), c.ID, 1)
 		var lastBody, lastDir string
@@ -418,6 +437,10 @@ func (a *App) handleDashboardConversation(w http.ResponseWriter, r *http.Request
 		http.Error(w, "missing conversation id", http.StatusBadRequest)
 		return
 	}
+	if convoID == demoConvoID {
+		a.renderAdminDemo(w, r)
+		return
+	}
 	convo, err := a.Store.GetConversation(r.Context(), convoID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
@@ -462,6 +485,21 @@ func (a *App) handleDashboardConversation(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := dashHistoryTmpl.Execute(w, view); err != nil {
 		log.Printf("dashHistoryTmpl: %v", err)
+	}
+}
+
+// renderAdminDemo renders the /demo template inside the admin chrome.
+// It reuses the existing /demo session machinery (chala_try cookie) so
+// admin demo state stays separate from real customer conversations and
+// nothing demo-side has to learn about Clerk users.
+func (a *App) renderAdminDemo(w http.ResponseWriter, r *http.Request) {
+	ses := a.trySessionFor(w, r)
+	ses.mu.Lock()
+	biz := ses.Business
+	ses.mu.Unlock()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := tryTmpl.Execute(w, tryView{Business: biz, IsAdmin: true}); err != nil {
+		log.Printf("tryTmpl admin: %v", err)
 	}
 }
 
@@ -739,7 +777,7 @@ form{display:inline}
     {{ range .Conversations }}
      <li>
       <a href="/admin/conversations/{{ .ID }}" style="display:block;color:inherit;text-decoration:none">
-       <span class="when">{{ .UpdatedAt.Format "15:04" }}</span>
+       <span class="when">{{ if .IsDemo }}demo{{ else }}{{ .UpdatedAt.Format "15:04" }}{{ end }}</span>
        <div class="who">{{ .CustomerJID }}</div>
        <div class="body">{{ if eq .LastDir "out" }}→{{ else }}←{{ end }} {{ .LastBody }}</div>
       </a>
