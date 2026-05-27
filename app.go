@@ -8,7 +8,6 @@ import (
 
 	"github.com/mbanerjeepalmer/chalagente/internal/agent"
 	"github.com/mbanerjeepalmer/chalagente/internal/clerkauth"
-	"github.com/mbanerjeepalmer/chalagente/internal/maps"
 	"github.com/mbanerjeepalmer/chalagente/internal/store"
 	"github.com/mbanerjeepalmer/chalagente/internal/voice"
 	"github.com/mbanerjeepalmer/chalagente/internal/wamanager"
@@ -19,7 +18,6 @@ type App struct {
 	WAMgr      *wamanager.Manager
 	Agent      agent.Engine
 	Voice      voice.Provider
-	Maps       maps.Client
 	Translator Translator
 	ClerkAuth  *clerkauth.Handlers
 	BaseURL    string

@@ -10,7 +10,6 @@ import (
 
 	"github.com/mbanerjeepalmer/chalagente/internal/agent"
 	"github.com/mbanerjeepalmer/chalagente/internal/clerkauth"
-	"github.com/mbanerjeepalmer/chalagente/internal/maps"
 	"github.com/mbanerjeepalmer/chalagente/internal/store"
 	"github.com/mbanerjeepalmer/chalagente/internal/voice"
 	"github.com/mbanerjeepalmer/chalagente/internal/wamanager"
@@ -71,7 +70,6 @@ func main() {
 		log.Printf("voice: ELEVENLABS_API_KEY not set — STT/TTS calls will return a clear error")
 	}
 	app.Voice = voice.NewCachedProvider(&voice.ElevenLabsProvider{APIKey: elevenKey}, 256)
-	app.Maps = maps.DefaultMockClient()
 	app.BaseURL = baseURL
 	cookieSecure := getenv("COOKIE_SECURE", "false") == "true"
 	secret := os.Getenv("CLERK_SECRET_KEY")

@@ -22,7 +22,6 @@ import (
 
 	"go.mau.fi/whatsmeow"
 	"github.com/mbanerjeepalmer/chalagente/internal/clerkauth"
-	"github.com/mbanerjeepalmer/chalagente/internal/maps"
 	"github.com/mbanerjeepalmer/chalagente/internal/store"
 	"github.com/mbanerjeepalmer/chalagente/internal/voice"
 	"github.com/mbanerjeepalmer/chalagente/internal/wamanager"
@@ -90,7 +89,6 @@ func newTestApp(t *testing.T) *App {
 	a.Store = s
 	a.Agent = agent.NewMockEngine()
 	a.Voice = &voice.MockProvider{}
-	a.Maps = maps.DefaultMockClient()
 	a.BaseURL = "http://127.0.0.1"
 	a.WAMgr = wamanager.New(nil, nil)
 	a.ClerkAuth = testClerkAuth(s)
@@ -139,9 +137,9 @@ func TestUnauthenticatedRedirectsToSignIn(t *testing.T) {
 	client := &http.Client{
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
-	res, err := client.Get(srv.URL + "/onboarding")
+	res, err := client.Get(srv.URL + "/admin")
 	if err != nil {
-		t.Fatalf("GET /onboarding: %v", err)
+		t.Fatalf("GET /admin: %v", err)
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusSeeOther && res.StatusCode != http.StatusFound {
@@ -150,88 +148,6 @@ func TestUnauthenticatedRedirectsToSignIn(t *testing.T) {
 	loc := res.Header.Get("Location")
 	if !strings.Contains(loc, "/sign-in") {
 		t.Fatalf("redirect to %q, want /sign-in", loc)
-	}
-}
-
-func TestSignedInUserCanReachOnboarding(t *testing.T) {
-	a := newTestApp(t)
-	srv := httptest.NewServer(a.Mux())
-	defer srv.Close()
-	jar, _ := cookiejar.New(nil)
-	signInAs(t, a, jar, srv, "clerk-onboarding")
-
-	client := &http.Client{Jar: jar}
-	res, err := client.Get(srv.URL + "/onboarding")
-	if err != nil {
-		t.Fatalf("GET /onboarding: %v", err)
-	}
-	defer res.Body.Close()
-	if res.StatusCode != 200 {
-		t.Fatalf("onboarding status: %d", res.StatusCode)
-	}
-	body, _ := io.ReadAll(res.Body)
-	if !strings.Contains(string(body), "Paso 1") {
-		t.Fatalf("expected onboarding step 1; body starts: %s", first(string(body), 200))
-	}
-	if _, err := a.Store.GetUserByEmail(context.Background(), "clerk-onboarding@example.com"); err != nil {
-		t.Fatalf("user not created: %v", err)
-	}
-}
-
-func TestOnboardingBusinessSavesBusiness(t *testing.T) {
-	a := newTestApp(t)
-	srv := httptest.NewServer(a.Mux())
-	defer srv.Close()
-	jar, _ := cookiejar.New(nil)
-	signInAs(t, a, jar, srv, "clerk-biz")
-
-	client := &http.Client{Jar: jar}
-	form := url.Values{
-		"action":  []string{"save"},
-		"name":    []string{"Café Pruebas"},
-		"address": []string{"Calle Falsa 123"},
-		"phone":   []string{"+52 55 1234 5678"},
-		"hours":   []string{"Lun-Vie 9-18"},
-	}
-	res, err := client.PostForm(srv.URL+"/onboarding/business", form)
-	if err != nil {
-		t.Fatalf("POST business: %v", err)
-	}
-	res.Body.Close()
-
-	u, err := a.Store.GetUserByEmail(context.Background(), "clerk-biz@example.com")
-	if err != nil {
-		t.Fatalf("GetUserByEmail: %v", err)
-	}
-	biz, err := a.Store.GetBusinessByUserID(context.Background(), u.ID)
-	if err != nil {
-		t.Fatalf("GetBusinessByUserID: %v", err)
-	}
-	if biz.Name != "Café Pruebas" {
-		t.Fatalf("name: %q", biz.Name)
-	}
-	if biz.Address != "Calle Falsa 123" {
-		t.Fatalf("address: %q", biz.Address)
-	}
-}
-
-func TestMapsSearchInOnboarding(t *testing.T) {
-	a := newTestApp(t)
-	srv := httptest.NewServer(a.Mux())
-	defer srv.Close()
-	jar, _ := cookiejar.New(nil)
-	signInAs(t, a, jar, srv, "clerk-maps")
-
-	client := &http.Client{Jar: jar}
-	form := url.Values{"action": []string{"search"}, "q": []string{"taqueria"}}
-	res, err := client.PostForm(srv.URL+"/onboarding/business", form)
-	if err != nil {
-		t.Fatalf("search: %v", err)
-	}
-	defer res.Body.Close()
-	body, _ := io.ReadAll(res.Body)
-	if !strings.Contains(strings.ToLower(string(body)), "taqu") {
-		t.Fatalf("expected taqueria results; body: %s", first(string(body), 400))
 	}
 }
 
@@ -626,34 +542,6 @@ func TestConnectionScreenHintAfterOnboarding(t *testing.T) {
 	}
 }
 
-func TestOnboardingFinishLandsOnAdminConnection(t *testing.T) {
-	a := newTestApp(t)
-	srv := httptest.NewServer(a.Mux())
-	defer srv.Close()
-	jar, _ := cookiejar.New(nil)
-	signInAs(t, a, jar, srv, "clerk-fin")
-
-	client := &http.Client{
-		Jar:           jar,
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
-	res, err := client.PostForm(srv.URL+"/onboarding/finish", url.Values{})
-	if err != nil {
-		t.Fatalf("POST finish: %v", err)
-	}
-	res.Body.Close()
-	if res.StatusCode != http.StatusSeeOther && res.StatusCode != http.StatusFound {
-		t.Fatalf("status: %d", res.StatusCode)
-	}
-	loc := res.Header.Get("Location")
-	if !strings.HasPrefix(loc, "/admin/connection") {
-		t.Errorf("expected /admin/connection redirect, got %q", loc)
-	}
-	if !strings.Contains(loc, "hint=biz") {
-		t.Errorf("expected hint=biz in redirect target, got %q", loc)
-	}
-}
-
 func TestDemoLiveTranscribeWS(t *testing.T) {
 	a := newTestApp(t)
 	srv := httptest.NewServer(a.Mux())
@@ -897,7 +785,7 @@ func TestTriggerKeywordExplained(t *testing.T) {
 		t.Fatalf("UpdateBusiness: %v", err)
 	}
 
-	for _, path := range []string{"/admin", "/onboarding/test"} {
+	for _, path := range []string{"/admin", "/admin/connection"} {
 		res, err := client.Get(srv.URL + path)
 		if err != nil {
 			t.Fatalf("GET %s: %v", path, err)

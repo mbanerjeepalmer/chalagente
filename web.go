@@ -41,15 +41,6 @@ func (a *App) Mux() http.Handler {
 	mux.HandleFunc("/demo/transcribe/ws", a.handleTryTranscribeWS)
 
 	protected := http.NewServeMux()
-	protected.HandleFunc("/onboarding", a.handleOnboarding)
-	protected.HandleFunc("/onboarding/business", a.handleOnboardingBusiness)
-	protected.HandleFunc("/onboarding/extra", a.handleOnboardingExtra)
-	protected.HandleFunc("/onboarding/whatsapp", a.handleOnboardingWhatsApp)
-	protected.HandleFunc("/onboarding/whatsapp/start", a.handleOnboardingWhatsAppStart)
-	protected.HandleFunc("/onboarding/whatsapp/qr.png", a.handleOnboardingQRPNG)
-	protected.HandleFunc("/onboarding/whatsapp/status", a.handleOnboardingPairStatus)
-	protected.HandleFunc("/onboarding/test", a.handleOnboardingTest)
-	protected.HandleFunc("/onboarding/finish", a.handleOnboardingFinish)
 
 	// Canonical admin routes — /admin/* is the source of truth.
 	protected.HandleFunc("/admin", a.handleDashboard)
@@ -76,8 +67,6 @@ func (a *App) Mux() http.Handler {
 	mux.HandleFunc("/app", redirectToAdmin)
 	mux.HandleFunc("/app/", redirectToAdmin)
 
-	mux.Handle("/onboarding", a.authMiddleware(protected))
-	mux.Handle("/onboarding/", a.authMiddleware(protected))
 	mux.Handle("/admin", a.authMiddleware(protected))
 	mux.Handle("/admin/", a.authMiddleware(protected))
 
