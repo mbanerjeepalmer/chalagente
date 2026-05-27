@@ -185,10 +185,10 @@ func (a *App) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if b.Name == "" || b.WADeviceJID == "" {
-		http.Redirect(w, r, "/onboarding", http.StatusSeeOther)
-		return
-	}
+	// /admin renders even before pairing — the connection screen owns the
+	// pair flow and the conversations list always has the demo row. The
+	// dashboard template surfaces a banner that points at Conexión while
+	// WhatsApp is still unpaired.
 
 	convos, err := a.Store.ListConversations(r.Context(), b.ID, 20)
 	if err != nil {
@@ -725,13 +725,19 @@ button{padding:.5rem .9rem;border-radius:4px;border:1px solid #bbb;background:#f
 button.primary{background:#25d366;color:white;border-color:#1f9c4d;font-weight:600}
 form{display:inline}
 </style></head><body>
-<h1>{{ .Business.Name }}</h1>
+<h1>{{ if .Business.Name }}{{ .Business.Name }}{{ else }}Tu negocio{{ end }}</h1>
 <nav class="tabs">
  <a href="/admin" class="active">Conversaciones</a>
  <a href="/admin/connection">Conexión</a>
  <a href="/admin/business">Información</a>
 </nav>
 {{ if .Flash }}<div class="flash">{{ .Flash }}</div>{{ end }}
+{{ if not .Business.WADeviceJID }}
+<div class="flash" style="background:#fef3c7;border-color:#d97706;color:#7c2d12">
+ Aún no has conectado WhatsApp. Mientras tanto puedes probar el agente en la conversación <a href="/admin/conversations/demo">Demo</a>.
+ <a href="/admin/connection" style="margin-left:.4rem;font-weight:600">Conectar WhatsApp →</a>
+</div>
+{{ end }}
 <div class="grid">
  <div>
   <div class="card">
@@ -794,6 +800,7 @@ form{display:inline}
   </div>
  </div>
  <div>
+  {{ if .Business.WADeviceJID }}
   <div class="card" style="text-align:center">
    <h2 style="margin-top:0">Comparte tu número</h2>
    <img class="qr" src="/admin/qr.png">
@@ -802,6 +809,7 @@ form{display:inline}
    <p style="font-size:.78em;color:#888;margin:.4rem 0 0">QR apunta a <a href="{{ .ShareURL }}">{{ .ShareURL }}</a></p>
    <p style="font-size:.78em;color:#888;margin:.2rem 0 0">→ <a href="{{ .WAMeURL }}">{{ .WAMeURL }}</a></p>
   </div>
+  {{ end }}
   <div class="card">
    {{ if .ClerkPublishableKey }}
     <div id="clerk-user-button" style="display:flex;align-items:center;gap:.5rem"></div>
@@ -910,7 +918,42 @@ img.qr{width:240px;height:240px;image-rendering:pixelated;border:1px solid #ddd;
    </form>
    <p class="warn"><strong>Atención:</strong> al desvincular se borra todo tu historial de Chalagente. WhatsApp en tu teléfono no se ve afectado.</p>
   {{ else }}
-   <p>Aún no has conectado un número. Pasa por la <a href="/onboarding/whatsapp">vinculación</a> para escanear un QR.</p>
+   <p>Aún no has conectado un número. Escanea el QR desde WhatsApp → Ajustes → Dispositivos vinculados → Vincular un dispositivo.</p>
+   <button id="startBtn" class="primary" type="button" onclick="startPairing()">Generar QR</button>
+   <div id="qrBox" style="display:none;margin-top:1rem;text-align:center">
+    <img id="qrImg" alt="QR" style="width:256px;height:256px;image-rendering:pixelated;border:1px solid #ccc;background:#fff">
+    <p id="pairStatus" class="muted" style="margin:.4rem 0 0">Esperando QR…</p>
+    <div id="manualBox" style="display:none;margin-top:.5rem">
+     <p style="color:#a16207;font-size:.9em">El QR caducó después de varios intentos sin escanear. Genera uno nuevo:</p>
+     <button type="button" onclick="startPairing()">Regenerar QR</button>
+    </div>
+   </div>
+   <script>
+    async function startPairing() {
+     document.getElementById('startBtn').disabled = true;
+     document.getElementById('manualBox').style.display = 'none';
+     const r = await fetch('/admin/connection/pair', {method:'POST'});
+     if (!r.ok) { document.getElementById('pairStatus').textContent = 'Error: ' + r.status; document.getElementById('startBtn').disabled = false; return; }
+     document.getElementById('qrBox').style.display = 'block';
+     pollPair();
+    }
+    async function pollPair() {
+     try {
+      const r = await fetch('/admin/connection/pair/status');
+      const s = await r.json();
+      document.getElementById('pairStatus').textContent = 'Estado: ' + (s.state || 'pendiente');
+      if (s.has_qr) document.getElementById('qrImg').src = '/admin/connection/qr.png?ts=' + Date.now();
+      if (s.done) { window.location = '/admin/connection?hint=biz&flash=' + encodeURIComponent('¡Listo! Tu WhatsApp está conectado.'); return; }
+      if (s.needs_manual) {
+       document.getElementById('manualBox').style.display = 'block';
+       document.getElementById('pairStatus').textContent = 'QR caducado — pulsa Regenerar QR';
+       document.getElementById('startBtn').disabled = false;
+       return;
+      }
+     } catch (e) { console.error(e); }
+     setTimeout(pollPair, 1500);
+    }
+   </script>
   {{ end }}
  </div>
  <div class="card">

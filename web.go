@@ -54,6 +54,13 @@ func (a *App) Mux() http.Handler {
 	// Canonical admin routes — /admin/* is the source of truth.
 	protected.HandleFunc("/admin", a.handleDashboard)
 	protected.HandleFunc("GET /admin/connection", a.handleAdminConnection)
+	// Pair endpoints alongside /admin/connection so the connection screen
+	// owns its own state without bouncing into the /onboarding wizard.
+	// Same handlers as the wizard's endpoints; the wizard routes will be
+	// removed in a follow-up.
+	protected.HandleFunc("POST /admin/connection/pair", a.handleOnboardingWhatsAppStart)
+	protected.HandleFunc("GET /admin/connection/qr.png", a.handleOnboardingQRPNG)
+	protected.HandleFunc("GET /admin/connection/pair/status", a.handleOnboardingPairStatus)
 	protected.HandleFunc("GET /admin/conversations/{id}", a.handleDashboardConversation)
 	protected.HandleFunc("POST /admin/conversations/{id}/agent", a.handleConversationAgentToggle)
 	protected.HandleFunc("/admin/agent", a.handleDashboardAgentToggle)

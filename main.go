@@ -82,7 +82,7 @@ func main() {
 		SecretKey:      secret,
 		PublishableKey: os.Getenv("CLERK_PUBLISHABLE_KEY"),
 		FrontendAPI:    os.Getenv("CLERK_FRONTEND_API"),
-		AfterSignInURL: getenv("CLERK_AFTER_SIGN_IN_URL", "/onboarding"),
+		AfterSignInURL: getenv("CLERK_AFTER_SIGN_IN_URL", "/admin"),
 		Store:          &storeClerkAdapter{s: appStore},
 		CookieSecure:   cookieSecure,
 	}
