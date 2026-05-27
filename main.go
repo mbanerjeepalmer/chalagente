@@ -66,7 +66,11 @@ func main() {
 	// /go/<id> redirect falls back to the source template, which is what
 	// we want in dev/test.
 	app.Translator = agentTranslator(app.Agent)
-	app.Voice = voice.NewCachedProvider(&voice.MockProvider{}, 256)
+	elevenKey := os.Getenv("ELEVENLABS_API_KEY")
+	if elevenKey == "" {
+		log.Printf("voice: ELEVENLABS_API_KEY not set — STT/TTS calls will return a clear error")
+	}
+	app.Voice = voice.NewCachedProvider(&voice.ElevenLabsProvider{APIKey: elevenKey}, 256)
 	app.Maps = maps.DefaultMockClient()
 	app.BaseURL = baseURL
 	cookieSecure := getenv("COOKIE_SECURE", "false") == "true"

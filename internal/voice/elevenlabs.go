@@ -95,10 +95,8 @@ func (p *ElevenLabsProvider) Transcribe(ctx context.Context, audio []byte, mimeT
 	if err := mw.WriteField("model_id", p.sttModel()); err != nil {
 		return Transcript{}, fmt.Errorf("voice: write model_id field: %w", err)
 	}
-	// Request language detection in the JSON response.
-	if err := mw.WriteField("language_code", ""); err != nil {
-		return Transcript{}, fmt.Errorf("voice: write language_code field: %w", err)
-	}
+	// language_code is intentionally omitted — ElevenLabs auto-detects when
+	// the field is absent and rejects empty strings as a validation error.
 
 	filename := "audio"
 	switch {

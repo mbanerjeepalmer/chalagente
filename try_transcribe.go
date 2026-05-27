@@ -23,10 +23,10 @@ const transcribeStreamSampleRate = 16000
 //
 // The server pipes audio into the provider stream and pushes transcript
 // events back as JSON text frames: `{"kind":"partial"|"final"|"error","text":"…"}`.
-// When the provider doesn't implement StreamingTranscriber (e.g. dev with
-// no ElevenLabs key and the cached provider wrapping the mock), we close
-// the WebSocket with a useful status code and message so the JS client can
-// fall back to the file-upload path.
+// When the provider doesn't implement StreamingTranscriber, we close the
+// WebSocket with a useful status code so the JS client can fall back to
+// the file-upload path. Missing ELEVENLABS_API_KEY surfaces later as an
+// error event from the stream itself, not here.
 func (a *App) handleTryTranscribeWS(w http.ResponseWriter, r *http.Request) {
 	streamer, ok := a.Voice.(voice.StreamingTranscriber)
 	if !ok {
