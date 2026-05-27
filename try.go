@@ -509,8 +509,9 @@ async function loadHistory() {
  const r = await fetch('/demo/history');
  const d = await r.json();
  chat.innerHTML = '';
- for (const m of d.messages) bubble(m.dir, m.body, null, null, m.kind);
- sentCount = (d.messages||[]).filter(m=>m.dir==='in').length;
+ const msgs = d.messages || [];
+ for (const m of msgs) bubble(m.dir, m.body, null, null, m.kind);
+ sentCount = msgs.filter(m=>m.dir==='in').length;
  if (sentCount === 0) {
   bubble('out', '¡Hola! Soy el agente de ' + bizName.textContent + '. Escríbeme como si fueras un cliente. Mándale al botón ➤ para probar la pregunta prellenada.');
  }
