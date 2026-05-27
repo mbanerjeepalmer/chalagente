@@ -188,6 +188,7 @@ func (a *App) handleTrySend(w http.ResponseWriter, r *http.Request) {
 	var (
 		incomingText string
 		transcript   string
+		audioLang    string
 		hadAudio     bool
 	)
 
@@ -211,6 +212,7 @@ func (a *App) handleTrySend(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			transcript = tr.Text
+			audioLang = tr.Language
 			if incomingText == "" {
 				incomingText = transcript
 			}
@@ -279,8 +281,10 @@ func (a *App) handleTrySend(w http.ResponseWriter, r *http.Request) {
 		"has_audio":  false,
 	}
 	if hadAudio {
-		syn, err := a.Voice.Synthesize(ctx, reply.Text, "default")
-		if err == nil {
+		syn, err := a.Voice.Synthesize(ctx, reply.Text, voiceIDForLang(audioLang))
+		if err != nil {
+			out["audio_error"] = err.Error()
+		} else {
 			out["has_audio"] = true
 			out["audio_b64"] = base64.StdEncoding.EncodeToString(syn.Audio)
 			out["audio_mime"] = syn.MimeType
