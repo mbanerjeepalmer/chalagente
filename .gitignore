@@ -8,8 +8,15 @@
 /data/
 
 # Env
-.env*
+.env
+.env.*
+!.env.example
 
 # OS / editor
 .DS_Store
 *.swp
+# CocoIndex Code (ccc)
+/.cocoindex_code/
+graphify-out/
+.cocoindex_code/
+.commandcode/

@@ -11,6 +11,7 @@ RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /out/server .
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata
 COPY --from=build /out/server /server
+COPY assets /assets
 ENV STORE_PATH=/data/store.db
 ENV HTTP_ADDR=:8080
 VOLUME ["/data"]

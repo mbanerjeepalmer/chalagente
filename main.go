@@ -20,8 +20,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const autoReply = "¡Hola! Gracias por escribir. Esta es una respuesta automática del POC de Chalagente."
-
 type Event struct {
 	Time time.Time `json:"time"`
 	Dir  string    `json:"dir"` // "in" | "out"
@@ -185,12 +183,46 @@ func (a *App) handleEvent(evt interface{}) {
 	}
 	a.publish(Event{Time: time.Now(), Dir: "in", Chat: msg.Info.Sender.String(), Body: body})
 
-	reply := &waProto.Message{Conversation: proto.String(autoReply)}
-	if _, err := a.client.SendMessage(context.Background(), msg.Info.Chat, reply); err != nil {
+	response := selectAgentResponse(body)
+	if err := a.sendAgentResponse(context.Background(), msg.Info.Chat, response); err != nil {
 		log.Printf("send reply: %v", err)
 		return
 	}
-	a.publish(Event{Time: time.Now(), Dir: "out", Chat: msg.Info.Chat.String(), Body: autoReply})
+	a.publish(Event{Time: time.Now(), Dir: "out", Chat: msg.Info.Chat.String(), Body: response.Intent + ": " + response.Text})
+}
+
+func (a *App) sendAgentResponse(ctx context.Context, chat types.JID, response AgentResponse) error {
+	if response.AudioPath != "" {
+		data, err := os.ReadFile(response.AudioPath)
+		if err == nil {
+			upload, err := a.client.Upload(ctx, data, whatsmeow.MediaAudio)
+			if err == nil {
+				ptt := true
+				audio := &waProto.AudioMessage{
+					URL:           proto.String(upload.URL),
+					DirectPath:    proto.String(upload.DirectPath),
+					MediaKey:      upload.MediaKey,
+					FileEncSHA256: upload.FileEncSHA256,
+					FileSHA256:    upload.FileSHA256,
+					FileLength:    proto.Uint64(upload.FileLength),
+					Mimetype:      proto.String("audio/mpeg"),
+					PTT:           proto.Bool(ptt),
+				}
+				if _, err := a.client.SendMessage(ctx, chat, &waProto.Message{AudioMessage: audio}); err == nil {
+					return nil
+				}
+				log.Printf("send audio reply: %v", err)
+			} else {
+				log.Printf("upload audio reply: %v", err)
+			}
+		} else {
+			log.Printf("read audio reply %s: %v", response.AudioPath, err)
+		}
+	}
+
+	reply := &waProto.Message{Conversation: proto.String(response.Text)}
+	_, err := a.client.SendMessage(ctx, chat, reply)
+	return err
 }
 
 func getenv(k, def string) string {
